@@ -1,5 +1,22 @@
 let cachedGroupOrder = null;
 let isEditingTitle = false;
+let resizeTimer = null;
+let searchTimer = null;
+
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function debounce(fn, delay) {
+  let timer = null;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
 
 function getColumnCount() {
   const containerWidth = document.getElementById('masonry').offsetWidth;
@@ -14,7 +31,6 @@ function getColumnCount() {
 }
 
 function getSortedGroups(groups, bookmarks) {
-  // 只在首次渲染或刷新时排序
   if (!cachedGroupOrder) {
     const groupStats = Object.keys(groups).map(group => {
       const items = groups[group];
@@ -28,34 +44,7 @@ function getSortedGroups(groups, bookmarks) {
     });
     cachedGroupOrder = groupStats.map(g => g.group);
   }
-  // 只返回当前存在的分组
   return cachedGroupOrder.filter(g => groups[g]);
-}
-
-function getMasonryLayout(groups, containerWidth, minGroupWidth) {
-  // 最大列数
-  let maxCols = Math.max(1, Math.floor(containerWidth / minGroupWidth));
-  // 列宽固定
-  let groupOuterWidth = minGroupWidth;
-  // 列间距
-  let gap = maxCols > 1 ? (containerWidth - maxCols * groupOuterWidth) / (maxCols - 1) : 0;
-
-  // Masonry分配优化
-  let cols = Array.from({ length: maxCols }, () => []);
-  let colPageCounts = Array(maxCols).fill(0);
-  const sortedGroups = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
-  // 先将最大N个分组分别分配到每一列
-  for (let i = 0; i < Math.min(maxCols, sortedGroups.length); i++) {
-    cols[i].push(sortedGroups[i]);
-    colPageCounts[i] += groups[sortedGroups[i]].length;
-  }
-  // 剩余分组再用贪心法分配
-  for (let i = maxCols; i < sortedGroups.length; i++) {
-    let minIdx = colPageCounts.indexOf(Math.min(...colPageCounts));
-    cols[minIdx].push(sortedGroups[i]);
-    colPageCounts[minIdx] += groups[sortedGroups[i]].length;
-  }
-  return { colsArr: cols, groupOuterWidth, gap };
 }
 
 function render() {
@@ -103,7 +92,6 @@ function render() {
         title.className = 'group-title';
         title.innerText = group;
         title.title = '点击编辑分组名';
-        title.style.cursor = 'pointer';
         title.onclick = function() {
           const input = document.createElement('input');
           input.type = 'text';
@@ -139,14 +127,36 @@ function render() {
           card.dataset.id = b.id;
           card.dataset.group = group;
           card.dataset.idx = idx;
-          card.innerHTML = `
-            <a href="${b.url}" class="bookmark-link" tabindex="-1">
-              <img src="${b.favicon}" onerror="this.src='icon16.png'" />
-              <span class="bookmark-title" title="点击编辑网页名" style="cursor:pointer;">${b.title}</span>
-            </a>
-            <div class="bookmark-url" title="${b.url}">${b.url}</div>
-            <button data-id="${b.id}" class="delBtn">删除</button>
-          `;
+          const link = document.createElement('a');
+          link.href = b.url;
+          link.className = 'bookmark-link';
+          link.tabIndex = -1;
+          
+          const img = document.createElement('img');
+          img.src = b.favicon || 'icon16.png';
+          img.onerror = function() { this.src = 'icon16.png'; };
+          
+          const titleSpan = document.createElement('span');
+          titleSpan.className = 'bookmark-title';
+          titleSpan.title = '点击编辑网页名';
+          titleSpan.textContent = b.title;
+          
+          link.appendChild(img);
+          link.appendChild(titleSpan);
+          
+          const urlDiv = document.createElement('div');
+          urlDiv.className = 'bookmark-url';
+          urlDiv.title = b.url;
+          urlDiv.textContent = b.url;
+          
+          const delBtn = document.createElement('button');
+          delBtn.className = 'delBtn';
+          delBtn.dataset.id = b.id;
+          delBtn.textContent = '删除';
+          
+          card.appendChild(link);
+          card.appendChild(urlDiv);
+          card.appendChild(delBtn);
           // 编辑网页名
           card.querySelector('.bookmark-title').onclick = function(e) {
             e.stopPropagation();
@@ -274,8 +284,8 @@ function render() {
 
     document.querySelectorAll('.delBtn').forEach(btn => {
       btn.onclick = function() {
+        if (!confirm('确定要删除这个收藏吗？')) return;
         const id = this.getAttribute('data-id');
-        // 只移除该网页，保持分组顺序不变
         bookmarks = bookmarks.filter(b => b.id !== id);
         chrome.storage.local.set({ bookmarks }, render);
       };
@@ -284,8 +294,11 @@ function render() {
 }
 
 window.addEventListener('resize', function() {
-  cachedGroupOrder = null;
-  render();
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    cachedGroupOrder = null;
+    render();
+  }, 200);
 });
 
 // ======= 导出/导入功能 =======
@@ -361,7 +374,6 @@ function importBookmarks() {
 }
 
 function ensureExportImportBar() {
-  // 保证导入/导出按钮始终在header-bar内
   let bar = document.getElementById('exportImportBar');
   if (!bar) {
     bar = document.createElement('div');
@@ -369,34 +381,16 @@ function ensureExportImportBar() {
     document.querySelector('.header-bar').appendChild(bar);
   }
   if (!bar.hasChildNodes()) {
-    // 重新渲染按钮
-    const btnStyle = `
-      background: linear-gradient(90deg, #4f8cff 60%, #357ae8 100%);
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      padding: 8px 18px;
-      font-size: 1em;
-      font-weight: bold;
-      letter-spacing: 1px;
-      box-shadow: 0 2px 8px #0001;
-      transition: background 0.2s, box-shadow 0.2s;
-      cursor: pointer;
-      outline: none;
-      margin-left: 12px;
-    `;
     const exportBtn = document.createElement('button');
     exportBtn.innerText = '导出收藏';
+    exportBtn.className = 'export-import-btn';
     exportBtn.onclick = exportBookmarks;
-    exportBtn.style.cssText = btnStyle;
-    exportBtn.onmouseover = function() { this.style.background = 'linear-gradient(90deg, #357ae8 60%, #4f8cff 100%)'; };
-    exportBtn.onmouseout = function() { this.style.background = 'linear-gradient(90deg, #4f8cff 60%, #357ae8 100%)'; };
+    
     const importBtn = document.createElement('button');
     importBtn.innerText = '导入收藏';
+    importBtn.className = 'export-import-btn';
     importBtn.onclick = importBookmarks;
-    importBtn.style.cssText = btnStyle;
-    importBtn.onmouseover = function() { this.style.background = 'linear-gradient(90deg, #357ae8 60%, #4f8cff 100%)'; };
-    importBtn.onmouseout = function() { this.style.background = 'linear-gradient(90deg, #4f8cff 60%, #357ae8 100%)'; };
+    
     bar.appendChild(exportBtn);
     bar.appendChild(importBtn);
   }
@@ -433,14 +427,32 @@ function renderSearchResults(results) {
     const card = document.createElement('div');
     card.className = 'bookmark-card search-result-card';
     card.style.cursor = 'pointer';
-    card.innerHTML = `
-      <a href="${b.url}" class="bookmark-link" tabindex="-1">
-        <img src="${b.favicon}" onerror="this.src='icon16.png'" />
-        <span class="bookmark-title" title="点击编辑网页名" style="cursor:pointer;">${b.title}</span>
-      </a>
-      <div class="bookmark-url" title="${b.url}">${b.url}</div>
-    `;
-    // 跳转
+    
+    const link = document.createElement('a');
+    link.href = b.url;
+    link.className = 'bookmark-link';
+    link.tabIndex = -1;
+    
+    const img = document.createElement('img');
+    img.src = b.favicon || 'icon16.png';
+    img.onerror = function() { this.src = 'icon16.png'; };
+    
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'bookmark-title';
+    titleSpan.title = '点击编辑网页名';
+    titleSpan.textContent = b.title;
+    
+    link.appendChild(img);
+    link.appendChild(titleSpan);
+    
+    const urlDiv = document.createElement('div');
+    urlDiv.className = 'bookmark-url';
+    urlDiv.title = b.url;
+    urlDiv.textContent = b.url;
+    
+    card.appendChild(link);
+    card.appendChild(urlDiv);
+    
     card.onclick = function(e) {
       if (e.target.classList.contains('bookmark-title') || e.target.tagName === 'INPUT') return;
       window.location.href = b.url;
@@ -454,21 +466,23 @@ function setupSearch() {
   const input = document.getElementById('searchInput');
   if (!input) return;
   input.addEventListener('input', function() {
-    const keyword = input.value.trim().toLowerCase();
-    // 移除搜索结果列表
-    let oldList = document.querySelector('.search-results-list');
-    if (!keyword) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const keyword = input.value.trim().toLowerCase();
+      let oldList = document.querySelector('.search-results-list');
+      if (!keyword) {
+        if (oldList) oldList.remove();
+        render();
+        return;
+      }
       if (oldList) oldList.remove();
-      render();
-      return;
-    }
-    if (oldList) oldList.remove();
-    chrome.storage.local.get({ bookmarks: [] }, function(data) {
-      const results = data.bookmarks.filter(b =>
-        (b.title && b.title.toLowerCase().includes(keyword)) ||
-        (b.url && b.url.toLowerCase().includes(keyword))
-      );
-      renderSearchResults(results);
-    });
+      chrome.storage.local.get({ bookmarks: [] }, function(data) {
+        const results = data.bookmarks.filter(b =>
+          (b.title && b.title.toLowerCase().includes(keyword)) ||
+          (b.url && b.url.toLowerCase().includes(keyword))
+        );
+        renderSearchResults(results);
+      });
+    }, 150);
   });
 } 
