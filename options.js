@@ -124,24 +124,40 @@ function handleImport(e) {
   const reader = new FileReader();
   reader.onload = (event) => {
     try {
-      const data = JSON.parse(event.target.result);
-      if (!data.bookmarks || !Array.isArray(data.bookmarks)) {
+      const parsed = JSON.parse(event.target.result);
+      
+      let importedBookmarks = [];
+      let groupOrder = [];
+      
+      if (Array.isArray(parsed)) {
+        importedBookmarks = parsed;
+      } else if (parsed.bookmarks && Array.isArray(parsed.bookmarks)) {
+        importedBookmarks = parsed.bookmarks;
+        groupOrder = parsed.groupOrder || [];
+      } else {
         throw new Error('Invalid format');
       }
       
-      chrome.storage.local.get({ bookmarks: [] }, (existing) => {
+      if (importedBookmarks.length === 0) {
+        throw new Error('No bookmarks found');
+      }
+      
+      chrome.storage.local.get({ bookmarks: [], groupOrder: [] }, (existing) => {
         const existingUrls = new Set(existing.bookmarks.map(b => b.url));
-        const newBookmarks = data.bookmarks.filter(b => !existingUrls.has(b.url));
+        const newBookmarks = importedBookmarks.filter(b => b.url && !existingUrls.has(b.url));
         const merged = [...existing.bookmarks, ...newBookmarks];
+        
+        const mergedGroupOrder = groupOrder.length > 0 ? groupOrder : existing.groupOrder;
         
         chrome.storage.local.set({ 
           bookmarks: merged,
-          groupOrder: data.groupOrder || []
+          groupOrder: mergedGroupOrder
         }, () => {
           showToast(i18n('importSuccess').replace('{count}', newBookmarks.length), 'success');
         });
       });
     } catch (err) {
+      console.error('Import error:', err);
       showToast(i18n('importFailed'), 'error');
     }
   };
