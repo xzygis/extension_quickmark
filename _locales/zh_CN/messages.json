@@ -83,6 +83,9 @@
   "addTag": {
     "message": "添加标签，按回车确认"
   },
+  "selectGroup": {
+    "message": "选择或创建分组"
+  },
   "moveToGroup": {
     "message": "移动到分组"
   },
@@ -190,5 +193,101 @@
   },
   "timeYearsAgo": {
     "message": "{n}年前"
+  },
+  "noMatchingGroups": {
+    "message": "没有匹配的分组"
+  },
+  "pressEnterToCreate": {
+    "message": "按 Enter 创建 \"{name}\""
+  },
+  "noGroups": {
+    "message": "暂无分组"
+  },
+  "noMatchingTags": {
+    "message": "没有匹配的标签"
+  },
+  "pressEnterToCreateTag": {
+    "message": "按 Enter 创建 #{name}"
+  },
+  "settings": {
+    "message": "设置"
+  },
+  "appearance": {
+    "message": "外观"
+  },
+  "theme": {
+    "message": "主题"
+  },
+  "themeDesc": {
+    "message": "选择您喜欢的颜色主题"
+  },
+  "themeLight": {
+    "message": "浅色"
+  },
+  "themeDark": {
+    "message": "深色"
+  },
+  "themeAuto": {
+    "message": "自动"
+  },
+  "defaultView": {
+    "message": "默认视图"
+  },
+  "defaultViewDesc": {
+    "message": "选择书签的默认显示方式"
+  },
+  "defaultSort": {
+    "message": "默认排序"
+  },
+  "defaultSortDesc": {
+    "message": "选择默认的排序方式"
+  },
+  "displayLanguage": {
+    "message": "显示语言"
+  },
+  "displayLanguageDesc": {
+    "message": "选择界面显示语言"
+  },
+  "langAuto": {
+    "message": "自动（跟随浏览器）"
+  },
+  "dataManagement": {
+    "message": "数据管理"
+  },
+  "exportData": {
+    "message": "导出数据"
+  },
+  "exportDataDesc": {
+    "message": "将所有书签导出为 JSON 文件"
+  },
+  "importData": {
+    "message": "导入数据"
+  },
+  "importDataDesc": {
+    "message": "从 JSON 文件导入书签"
+  },
+  "clearData": {
+    "message": "清除所有数据"
+  },
+  "clearDataDesc": {
+    "message": "删除所有书签和设置，此操作不可撤销"
+  },
+  "clearAll": {
+    "message": "清除全部"
+  },
+  "confirmClearAll": {
+    "message": "确定要删除所有数据吗？此操作不可撤销。"
+  },
+  "dataCleared": {
+    "message": "所有数据已清除"
+  },
+  "about": {
+    "message": "关于"
+  },
+  "version": {
+    "message": "版本"
+  },
+  "settingsSaved": {
+    "message": "设置会自动保存"
   }
 }

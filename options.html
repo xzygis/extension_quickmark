@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>QuickMark Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <div class="options-header">
+      <div class="logo">
+        <img class="logo-icon" src="icon128.png" alt="QuickMark">
+        <span>QuickMark</span>
+      </div>
+      <h1 class="options-title" data-i18n="settings"></h1>
+    </div>
+
+    <div class="options-content">
+      <section class="options-section">
+        <h2 class="section-title" data-i18n="appearance"></h2>
+        
+        <div class="option-item">
+          <div class="option-info">
+            <label class="option-label" data-i18n="theme"></label>
+            <p class="option-desc" data-i18n="themeDesc"></p>
+          </div>
+          <div class="option-control">
+            <div class="theme-selector" id="themeSelector">
+              <button class="theme-option" data-theme="light">
+                <span class="theme-icon">☀️</span>
+                <span data-i18n="themeLight"></span>
+              </button>
+              <button class="theme-option" data-theme="dark">
+                <span class="theme-icon">🌙</span>
+                <span data-i18n="themeDark"></span>
+              </button>
+              <button class="theme-option" data-theme="auto">
+                <span class="theme-icon">💻</span>
+                <span data-i18n="themeAuto"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-item">
+          <div class="option-info">
+            <label class="option-label" data-i18n="defaultView"></label>
+            <p class="option-desc" data-i18n="defaultViewDesc"></p>
+          </div>
+          <div class="option-control">
+            <select class="option-select" id="defaultView">
+              <option value="card" data-i18n="viewCard"></option>
+              <option value="list" data-i18n="viewList"></option>
+              <option value="headline" data-i18n="viewHeadline"></option>
+            </select>
+          </div>
+        </div>
+
+        <div class="option-item">
+          <div class="option-info">
+            <label class="option-label" data-i18n="defaultSort"></label>
+            <p class="option-desc" data-i18n="defaultSortDesc"></p>
+          </div>
+          <div class="option-control">
+            <select class="option-select" id="defaultSort">
+              <option value="recent" data-i18n="sortRecent"></option>
+              <option value="alpha" data-i18n="sortAlpha"></option>
+              <option value="clicks" data-i18n="sortClicks"></option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="options-section">
+        <h2 class="section-title" data-i18n="language"></h2>
+        
+        <div class="option-item">
+          <div class="option-info">
+            <label class="option-label" data-i18n="displayLanguage"></label>
+            <p class="option-desc" data-i18n="displayLanguageDesc"></p>
+          </div>
+          <div class="option-control">
+            <select class="option-select" id="langSelect">
+              <option value="auto" data-i18n="langAuto"></option>
+              <option value="en">English</option>
+              <option value="zh_CN">中文</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="options-section">
+        <h2 class="section-title" data-i18n="dataManagement"></h2>
+        
+        <div class="option-item">
+          <div class="option-info">
+            <label class="option-label" data-i18n="exportData"></label>
+            <p class="option-desc" data-i18n="exportDataDesc"></p>
+          </div>
+          <div class="option-control">
+            <button class="btn btn-default" id="exportBtn" data-i18n="export"></button>
+          </div>
+        </div>
+
+        <div class="option-item">
+          <div class="option-info">
+            <label class="option-label" data-i18n="importData"></label>
+            <p class="option-desc" data-i18n="importDataDesc"></p>
+          </div>
+          <div class="option-control">
+            <button class="btn btn-default" id="importBtn" data-i18n="import"></button>
+            <input type="file" id="importFile" accept=".json" style="display: none;">
+          </div>
+        </div>
+
+        <div class="option-item danger">
+          <div class="option-info">
+            <label class="option-label" data-i18n="clearData"></label>
+            <p class="option-desc" data-i18n="clearDataDesc"></p>
+          </div>
+          <div class="option-control">
+            <button class="btn btn-danger" id="clearBtn" data-i18n="clearAll"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="options-section">
+        <h2 class="section-title" data-i18n="about"></h2>
+        
+        <div class="option-item">
+          <div class="option-info">
+            <label class="option-label">QuickMark</label>
+            <p class="option-desc" data-i18n="version"></p>
+          </div>
+          <div class="option-control">
+            <span class="version-text">v1.3.0</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="options-footer">
+      <p data-i18n="settingsSaved"></p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

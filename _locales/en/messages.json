@@ -83,6 +83,9 @@
   "addTag": {
     "message": "Add tag, press Enter"
   },
+  "selectGroup": {
+    "message": "Select or create group"
+  },
   "moveToGroup": {
     "message": "Move to Group"
   },
@@ -190,5 +193,101 @@
   },
   "timeYearsAgo": {
     "message": "{n}y ago"
+  },
+  "noMatchingGroups": {
+    "message": "No matching groups"
+  },
+  "pressEnterToCreate": {
+    "message": "Press Enter to create \"{name}\""
+  },
+  "noGroups": {
+    "message": "No groups yet"
+  },
+  "noMatchingTags": {
+    "message": "No matching tags"
+  },
+  "pressEnterToCreateTag": {
+    "message": "Press Enter to create #{name}"
+  },
+  "settings": {
+    "message": "Settings"
+  },
+  "appearance": {
+    "message": "Appearance"
+  },
+  "theme": {
+    "message": "Theme"
+  },
+  "themeDesc": {
+    "message": "Choose your preferred color theme"
+  },
+  "themeLight": {
+    "message": "Light"
+  },
+  "themeDark": {
+    "message": "Dark"
+  },
+  "themeAuto": {
+    "message": "Auto"
+  },
+  "defaultView": {
+    "message": "Default View"
+  },
+  "defaultViewDesc": {
+    "message": "Choose the default view mode for bookmarks"
+  },
+  "defaultSort": {
+    "message": "Default Sort"
+  },
+  "defaultSortDesc": {
+    "message": "Choose the default sorting method"
+  },
+  "displayLanguage": {
+    "message": "Display Language"
+  },
+  "displayLanguageDesc": {
+    "message": "Choose the language for the interface"
+  },
+  "langAuto": {
+    "message": "Auto (Browser)"
+  },
+  "dataManagement": {
+    "message": "Data Management"
+  },
+  "exportData": {
+    "message": "Export Data"
+  },
+  "exportDataDesc": {
+    "message": "Export all bookmarks to a JSON file"
+  },
+  "importData": {
+    "message": "Import Data"
+  },
+  "importDataDesc": {
+    "message": "Import bookmarks from a JSON file"
+  },
+  "clearData": {
+    "message": "Clear All Data"
+  },
+  "clearDataDesc": {
+    "message": "Delete all bookmarks and settings. This cannot be undone."
+  },
+  "clearAll": {
+    "message": "Clear All"
+  },
+  "confirmClearAll": {
+    "message": "Are you sure you want to delete all data? This cannot be undone."
+  },
+  "dataCleared": {
+    "message": "All data has been cleared"
+  },
+  "about": {
+    "message": "About"
+  },
+  "version": {
+    "message": "Version"
+  },
+  "settingsSaved": {
+    "message": "Settings are saved automatically"
   }
 }

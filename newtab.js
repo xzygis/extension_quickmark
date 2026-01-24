@@ -544,13 +544,216 @@ function updateBatchToolbar() {
   }
 }
 
+function getAllGroups() {
+  const groupCount = {};
+  bookmarks.forEach(b => {
+    const g = b.group || i18n('ungrouped');
+    groupCount[g] = (groupCount[g] || 0) + 1;
+  });
+  return Object.entries(groupCount).sort((a, b) => b[1] - a[1]);
+}
+
+function getAllTagsWithCount() {
+  const tagCount = {};
+  bookmarks.forEach(b => {
+    if (b.tags && Array.isArray(b.tags)) {
+      b.tags.forEach(t => {
+        tagCount[t] = (tagCount[t] || 0) + 1;
+      });
+    }
+  });
+  return Object.entries(tagCount).sort((a, b) => b[1] - a[1]);
+}
+
+function setupGroupDropdown() {
+  const wrapper = document.getElementById('editGroupWrapper');
+  const input = document.getElementById('editGroupInput');
+  const dropdown = document.getElementById('groupDropdown');
+  
+  function getSelectedGroup() {
+    const chip = wrapper.querySelector('.group-chip');
+    return chip ? chip.dataset.value : null;
+  }
+  
+  function setGroupChip(groupName) {
+    wrapper.querySelectorAll('.group-chip').forEach(el => el.remove());
+    
+    if (groupName) {
+      const chip = document.createElement('span');
+      chip.className = 'group-chip';
+      chip.dataset.value = groupName;
+      chip.innerHTML = `<span class="group-chip-color" style="background: ${getGroupColor(groupName)}"></span>${groupName} <span class="tag-remove">×</span>`;
+      chip.querySelector('.tag-remove').onclick = () => {
+        chip.remove();
+        input.style.display = '';
+        input.focus();
+      };
+      wrapper.insertBefore(chip, input);
+      input.value = '';
+      input.style.display = 'none';
+    } else {
+      input.style.display = '';
+    }
+  }
+  
+  function showDropdown(filterByInput = false) {
+    const groups = getAllGroups();
+    let filtered = groups;
+    
+    if (filterByInput && input.value.trim()) {
+      const currentValue = input.value.toLowerCase();
+      filtered = groups.filter(([name]) => 
+        name.toLowerCase().includes(currentValue)
+      );
+    }
+    
+    if (filtered.length === 0) {
+      const inputVal = input.value.trim();
+      if (inputVal) {
+        dropdown.innerHTML = `<div class="combo-dropdown-empty">${i18n('pressEnterToCreate').replace('{name}', inputVal)}</div>`;
+        dropdown.classList.add('show');
+      } else {
+        dropdown.classList.remove('show');
+      }
+    } else {
+      dropdown.innerHTML = filtered.map(([name, count]) => `
+        <div class="combo-dropdown-item" data-value="${name}">
+          <span class="item-icon" style="background: ${getGroupColor(name)}"></span>
+          <span>${name}</span>
+          <span class="item-count">${count}</span>
+        </div>
+      `).join('');
+      dropdown.classList.add('show');
+      
+      dropdown.querySelectorAll('.combo-dropdown-item').forEach(item => {
+        item.onclick = () => {
+          setGroupChip(item.dataset.value);
+          dropdown.classList.remove('show');
+        };
+      });
+    }
+  }
+  
+  input.onfocus = () => showDropdown(false);
+  input.oninput = () => showDropdown(true);
+  
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && input.value.trim()) {
+      e.preventDefault();
+      setGroupChip(input.value.trim());
+      dropdown.classList.remove('show');
+    }
+    if (e.key === 'Backspace' && !input.value) {
+      const chip = wrapper.querySelector('.group-chip');
+      if (chip) {
+        chip.remove();
+        input.style.display = '';
+      }
+    }
+  };
+  
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#editGroupWrapper')) {
+      dropdown.classList.remove('show');
+    }
+  });
+  
+  window.setGroupChip = setGroupChip;
+  window.getSelectedGroup = getSelectedGroup;
+}
+
+function setupTagDropdown() {
+  const input = document.getElementById('editTagInput');
+  const dropdown = document.getElementById('tagDropdown');
+  const wrapper = document.getElementById('editTagsWrapper');
+  
+  function getExistingTags() {
+    const tags = [];
+    wrapper.querySelectorAll('.tag-chip').forEach(chip => {
+      const text = chip.textContent.replace('×', '').replace('#', '').trim();
+      if (text) tags.push(text);
+    });
+    return tags;
+  }
+  
+  function showDropdown() {
+    const allTags = getAllTagsWithCount();
+    const existingTags = getExistingTags();
+    const currentValue = input.value.toLowerCase();
+    
+    const filtered = allTags.filter(([name]) => 
+      !existingTags.includes(name) && name.toLowerCase().includes(currentValue)
+    );
+    
+    if (filtered.length === 0) {
+      const inputVal = input.value.trim();
+      if (inputVal) {
+        dropdown.innerHTML = `<div class="combo-dropdown-empty">${i18n('pressEnterToCreateTag').replace('{name}', inputVal)}</div>`;
+        dropdown.classList.add('show');
+      } else {
+        dropdown.classList.remove('show');
+      }
+    } else {
+      dropdown.innerHTML = filtered.map(([name, count]) => `
+        <div class="combo-dropdown-item" data-value="${name}">
+          <span>#${name}</span>
+          <span class="item-count">${count}</span>
+        </div>
+      `).join('');
+      dropdown.classList.add('show');
+      
+      dropdown.querySelectorAll('.combo-dropdown-item').forEach(item => {
+        item.onclick = () => {
+          addTagChip(item.dataset.value);
+          input.value = '';
+          dropdown.classList.remove('show');
+          input.focus();
+        };
+      });
+    }
+  }
+  
+  function addTagChip(tagName) {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `#${tagName} <span class="tag-remove">×</span>`;
+    chip.querySelector('.tag-remove').onclick = () => chip.remove();
+    wrapper.insertBefore(chip, input);
+  }
+  
+  input.onfocus = showDropdown;
+  input.oninput = showDropdown;
+  
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && input.value.trim()) {
+      e.preventDefault();
+      addTagChip(input.value.trim());
+      input.value = '';
+      dropdown.classList.remove('show');
+    }
+  };
+  
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.tag-input-wrapper')) {
+      dropdown.classList.remove('show');
+    }
+  });
+}
+
 function openEditModal(bookmark) {
   editingBookmarkId = bookmark.id;
   
   document.getElementById('editTitle').value = bookmark.title || '';
   document.getElementById('editUrl').value = bookmark.url || '';
-  document.getElementById('editGroup').value = bookmark.group || '';
   document.getElementById('editNote').value = bookmark.note || '';
+  
+  const groupInput = document.getElementById('editGroupInput');
+  groupInput.value = '';
+  groupInput.style.display = '';
+  document.getElementById('editGroupWrapper').querySelectorAll('.group-chip').forEach(el => el.remove());
+  if (bookmark.group) {
+    window.setGroupChip(bookmark.group);
+  }
   
   const wrapper = document.getElementById('editTagsWrapper');
   wrapper.querySelectorAll('.tag-chip').forEach(el => el.remove());
@@ -579,7 +782,11 @@ function saveEditModal() {
   if (!bookmark) return;
   
   bookmark.title = document.getElementById('editTitle').value.trim();
-  bookmark.group = document.getElementById('editGroup').value.trim() || i18n('ungrouped');
+  
+  const selectedGroup = window.getSelectedGroup();
+  const groupInputValue = document.getElementById('editGroupInput').value.trim();
+  bookmark.group = selectedGroup || groupInputValue || i18n('ungrouped');
+  
   bookmark.note = document.getElementById('editNote').value.trim();
   bookmark.lastActiveAt = Date.now();
   
@@ -919,7 +1126,8 @@ function setupModals() {
   document.getElementById('cancelTag').onclick = closeTagModal;
   document.getElementById('confirmTag').onclick = confirmBatchTag;
   
-  setupTagInput('editTagsWrapper', 'editTagInput');
+  setupGroupDropdown();
+  setupTagDropdown();
   setupTagInput('batchTagsWrapper', 'batchTagInput');
   
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -936,16 +1144,13 @@ async function init() {
   
   loadBookmarks(() => {
     applyI18n();
-    setupLangSelect();
+    setupSettingsBtn();
     render();
     setupSearch();
     setupViewToggle();
     setupSort();
     setupBatchMode();
     setupModals();
-    
-    document.getElementById('exportBtn').onclick = exportBookmarks;
-    document.getElementById('importBtn').onclick = importBookmarks;
     
     document.body.addEventListener('click', (e) => {
       const input = document.getElementById('searchInput');
@@ -965,15 +1170,9 @@ async function init() {
   });
 }
 
-function setupLangSelect() {
-  const select = document.getElementById('langSelect');
-  select.value = currentLang;
-  
-  select.onchange = (e) => {
-    currentLang = e.target.value;
-    chrome.storage.local.set({ lang: currentLang });
-    applyI18n();
-    render();
+function setupSettingsBtn() {
+  document.getElementById('settingsBtn').onclick = () => {
+    chrome.runtime.openOptionsPage();
   };
 }
 

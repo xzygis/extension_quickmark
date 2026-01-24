@@ -9,7 +9,7 @@
   <div class="header-bar">
     <div class="header-left">
       <div class="logo">
-        <span class="logo-icon">🔖</span>
+        <img class="logo-icon" src="icon128.png" alt="QuickMark">
         <span>QuickMark</span>
       </div>
     </div>
@@ -35,13 +35,7 @@
         <option value="clicks" data-i18n="sortClicks"></option>
       </select>
       <button class="header-btn" id="batchBtn">☑ <span data-i18n="batchMode"></span></button>
-      <button class="header-btn" id="exportBtn">↓ <span data-i18n="export"></span></button>
-      <button class="header-btn" id="importBtn">↑ <span data-i18n="import"></span></button>
-      <select class="sort-select" id="langSelect" style="width: auto; min-width: 80px;">
-        <option value="auto">Auto</option>
-        <option value="en">English</option>
-        <option value="zh_CN">中文</option>
-      </select>
+      <button class="header-btn" id="settingsBtn" title="Settings">⚙️</button>
     </div>
   </div>
 
@@ -89,12 +83,16 @@
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="group"></label>
-          <input type="text" class="form-input" id="editGroup">
+          <div class="tag-input-wrapper" id="editGroupWrapper">
+            <input type="text" class="tag-input" id="editGroupInput" data-i18n-placeholder="selectGroup" autocomplete="off">
+            <div class="combo-dropdown" id="groupDropdown"></div>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="tags"></label>
           <div class="tag-input-wrapper" id="editTagsWrapper">
-            <input type="text" class="tag-input" id="editTagInput" data-i18n-placeholder="addTag">
+            <input type="text" class="tag-input" id="editTagInput" autocomplete="off">
+            <div class="combo-dropdown tag-dropdown" id="tagDropdown"></div>
           </div>
         </div>
         <div class="form-group">
