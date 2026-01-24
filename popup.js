@@ -16,13 +16,12 @@ function checkAndSetButton(url) {
   });
 }
 
-function getSecondLevelDomain(hostname) {
-  // 简单提取二级域名（如foo.example.com -> example.com）
-  const parts = hostname.split('.');
-  if (parts.length >= 2) {
-    return parts.slice(-2).join('.');
-  }
-  return hostname;
+function showStatus(message) {
+  const status = document.getElementById('status');
+  status.innerText = message;
+  setTimeout(() => {
+    status.innerText = '';
+  }, 2000);
 }
 
 chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
@@ -38,7 +37,7 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
         // 已收藏，直接取消收藏
         bookmarks.splice(idx, 1);
         chrome.storage.local.set({ bookmarks }, function() {
-          document.getElementById('status').innerText = '已取消收藏';
+          showStatus('已取消收藏');
           updateButton(false);
         });
       } else {
@@ -69,7 +68,7 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
           createdAt: Date.now()
         });
         chrome.storage.local.set({ bookmarks }, function() {
-          document.getElementById('status').innerText = '收藏成功！';
+          showStatus('收藏成功！');
           updateButton(true);
         });
       }
