@@ -512,11 +512,18 @@ function render() {
   const cols = Array.from({ length: colCount }, () => []);
   const colHeights = Array(colCount).fill(0);
   
-  orderedGroups.forEach(groupName => {
-    const items = groups[groupName];
+  const groupsWithSize = orderedGroups.map(name => ({
+    name,
+    items: groups[name],
+    size: groups[name].length
+  }));
+  
+  groupsWithSize.sort((a, b) => b.size - a.size);
+  
+  groupsWithSize.forEach(({ name, items, size }) => {
     const minIdx = colHeights.indexOf(Math.min(...colHeights));
-    cols[minIdx].push({ groupName, items });
-    colHeights[minIdx] += items.length + 1;
+    cols[minIdx].push({ groupName: name, items });
+    colHeights[minIdx] += size + 2;
   });
   
   container.innerHTML = '';
@@ -836,12 +843,15 @@ function setupTagInput(wrapperId, inputId) {
 }
 
 function openMoveModal() {
-  const select = document.getElementById('moveGroupSelect');
-  const groups = [...new Set(bookmarks.map(b => b.group || i18n('ungrouped')))];
+  const wrapper = document.getElementById('moveGroupWrapper');
+  const input = document.getElementById('moveGroupInput');
   
-  select.innerHTML = groups.map(g => `<option value="${g}">${g}</option>`).join('');
-  document.getElementById('newGroupInput').value = '';
+  wrapper.querySelectorAll('.group-chip').forEach(el => el.remove());
+  input.value = '';
+  input.style.display = '';
+  
   document.getElementById('moveModal').classList.add('show');
+  input.focus();
 }
 
 function closeMoveModal() {
@@ -849,10 +859,15 @@ function closeMoveModal() {
 }
 
 function confirmMove() {
-  const newGroup = document.getElementById('newGroupInput').value.trim() 
-    || document.getElementById('moveGroupSelect').value;
+  const wrapper = document.getElementById('moveGroupWrapper');
+  const chip = wrapper.querySelector('.group-chip');
+  const inputValue = document.getElementById('moveGroupInput').value.trim();
+  const newGroup = chip ? chip.dataset.value : inputValue;
   
-  if (!newGroup) return;
+  if (!newGroup) {
+    showTip(i18n('pleaseSelectGroup'), 'error');
+    return;
+  }
   
   bookmarks.forEach(b => {
     if (selectedIds.has(b.id)) {
@@ -868,11 +883,101 @@ function confirmMove() {
   });
 }
 
+function setupMoveGroupDropdown() {
+  const wrapper = document.getElementById('moveGroupWrapper');
+  const input = document.getElementById('moveGroupInput');
+  const dropdown = document.getElementById('moveGroupDropdown');
+  
+  function setMoveGroupChip(groupName) {
+    wrapper.querySelectorAll('.group-chip').forEach(el => el.remove());
+    
+    if (groupName) {
+      const chip = document.createElement('span');
+      chip.className = 'group-chip';
+      chip.dataset.value = groupName;
+      chip.innerHTML = `<span class="group-chip-color" style="background: ${getGroupColor(groupName)}"></span>${groupName} <span class="tag-remove">×</span>`;
+      chip.querySelector('.tag-remove').onclick = () => {
+        chip.remove();
+        input.style.display = '';
+        input.focus();
+      };
+      wrapper.insertBefore(chip, input);
+      input.value = '';
+      input.style.display = 'none';
+    } else {
+      input.style.display = '';
+    }
+  }
+  
+  function showDropdown(filterByInput = false) {
+    const groups = getAllGroups();
+    let filtered = groups;
+    
+    if (filterByInput && input.value.trim()) {
+      const currentValue = input.value.toLowerCase();
+      filtered = groups.filter(([name]) => 
+        name.toLowerCase().includes(currentValue)
+      );
+    }
+    
+    if (filtered.length === 0) {
+      const inputVal = input.value.trim();
+      if (inputVal) {
+        dropdown.innerHTML = `<div class="combo-dropdown-empty">${i18n('pressEnterToCreate').replace('{name}', inputVal)}</div>`;
+        dropdown.classList.add('show');
+      } else {
+        dropdown.classList.remove('show');
+      }
+    } else {
+      dropdown.innerHTML = filtered.map(([name, count]) => `
+        <div class="combo-dropdown-item" data-value="${name}">
+          <span class="item-icon" style="background: ${getGroupColor(name)}"></span>
+          <span>${name}</span>
+          <span class="item-count">${count}</span>
+        </div>
+      `).join('');
+      dropdown.classList.add('show');
+      
+      dropdown.querySelectorAll('.combo-dropdown-item').forEach(item => {
+        item.onclick = () => {
+          setMoveGroupChip(item.dataset.value);
+          dropdown.classList.remove('show');
+        };
+      });
+    }
+  }
+  
+  input.onfocus = () => showDropdown(false);
+  input.oninput = () => showDropdown(true);
+  
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && input.value.trim()) {
+      e.preventDefault();
+      setMoveGroupChip(input.value.trim());
+      dropdown.classList.remove('show');
+    }
+    if (e.key === 'Backspace' && !input.value) {
+      const chip = wrapper.querySelector('.group-chip');
+      if (chip) {
+        chip.remove();
+        input.style.display = '';
+      }
+    }
+  };
+  
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#moveGroupWrapper')) {
+      dropdown.classList.remove('show');
+    }
+  });
+}
+
 function openTagModal() {
   const wrapper = document.getElementById('batchTagsWrapper');
   wrapper.querySelectorAll('.tag-chip').forEach(el => el.remove());
   document.getElementById('batchTagInput').value = '';
   document.getElementById('tagModal').classList.add('show');
+  document.getElementById('batchTagInput').focus();
 }
 
 function closeTagModal() {
@@ -907,6 +1012,84 @@ function confirmBatchTag() {
     selectedIds.clear();
     closeTagModal();
     render();
+  });
+}
+
+function setupBatchTagDropdown() {
+  const wrapper = document.getElementById('batchTagsWrapper');
+  const input = document.getElementById('batchTagInput');
+  const dropdown = document.getElementById('batchTagDropdown');
+  
+  function getExistingTags() {
+    const tags = [];
+    wrapper.querySelectorAll('.tag-chip').forEach(chip => {
+      const text = chip.textContent.replace('×', '').replace('#', '').trim();
+      if (text) tags.push(text);
+    });
+    return tags;
+  }
+  
+  function addBatchTagChip(tagName) {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `#${tagName} <span class="tag-remove">×</span>`;
+    chip.querySelector('.tag-remove').onclick = () => chip.remove();
+    wrapper.insertBefore(chip, input);
+  }
+  
+  function showDropdown() {
+    const allTags = getAllTagsWithCount();
+    const existingTags = getExistingTags();
+    const currentValue = input.value.toLowerCase();
+    
+    const filtered = allTags.filter(([name]) => 
+      !existingTags.includes(name) && name.toLowerCase().includes(currentValue)
+    );
+    
+    if (filtered.length === 0) {
+      const inputVal = input.value.trim();
+      if (inputVal) {
+        dropdown.innerHTML = `<div class="combo-dropdown-empty">${i18n('pressEnterToCreateTag').replace('{name}', inputVal)}</div>`;
+        dropdown.classList.add('show');
+      } else {
+        dropdown.classList.remove('show');
+      }
+    } else {
+      dropdown.innerHTML = filtered.map(([name, count]) => `
+        <div class="combo-dropdown-item" data-value="${name}">
+          <span>#${name}</span>
+          <span class="item-count">${count}</span>
+        </div>
+      `).join('');
+      dropdown.classList.add('show');
+      
+      dropdown.querySelectorAll('.combo-dropdown-item').forEach(item => {
+        item.onclick = () => {
+          addBatchTagChip(item.dataset.value);
+          input.value = '';
+          dropdown.classList.remove('show');
+          input.focus();
+        };
+      });
+    }
+  }
+  
+  input.onfocus = showDropdown;
+  input.oninput = showDropdown;
+  
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && input.value.trim()) {
+      e.preventDefault();
+      addBatchTagChip(input.value.trim());
+      input.value = '';
+      dropdown.classList.remove('show');
+    }
+  };
+  
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#batchTagsWrapper')) {
+      dropdown.classList.remove('show');
+    }
   });
 }
 
@@ -1081,14 +1264,6 @@ function setupViewToggle() {
 }
 
 function setupSort() {
-  const select = document.getElementById('sortSelect');
-  select.value = currentSort;
-  
-  select.onchange = (e) => {
-    currentSort = e.target.value;
-    chrome.storage.local.set({ sortMode: currentSort });
-    render();
-  };
 }
 
 function setupBatchMode() {
@@ -1128,7 +1303,8 @@ function setupModals() {
   
   setupGroupDropdown();
   setupTagDropdown();
-  setupTagInput('batchTagsWrapper', 'batchTagInput');
+  setupMoveGroupDropdown();
+  setupBatchTagDropdown();
   
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.onclick = (e) => {
@@ -1171,9 +1347,14 @@ async function init() {
 }
 
 function setupSettingsBtn() {
-  document.getElementById('settingsBtn').onclick = () => {
-    chrome.runtime.openOptionsPage();
-  };
+  const btn = document.getElementById('settingsBtn');
+  if (btn) {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.location.href = 'options.html';
+    };
+  }
 }
 
 window.addEventListener('resize', () => {

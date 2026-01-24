@@ -1,4 +1,24 @@
-const i18n = (key) => chrome.i18n.getMessage(key) || key;
+const messages = {
+  bookmarked: { en: 'Bookmarked', zh: '已收藏' },
+  unbookmarked: { en: 'Removed', zh: '已取消收藏' },
+  cannotGetPage: { en: 'Cannot get page', zh: '无法获取页面' },
+  pageNotSupported: { en: 'Page not supported', zh: '不支持此页面' }
+};
+
+let userLang = 'auto';
+
+function getEffectiveLang() {
+  if (userLang === 'auto') {
+    const browserLang = chrome.i18n.getUILanguage() || navigator.language || 'en';
+    return browserLang.startsWith('zh') ? 'zh' : 'en';
+  }
+  return userLang.startsWith('zh') ? 'zh' : 'en';
+}
+
+function i18n(key) {
+  const lang = getEffectiveLang();
+  return messages[key] ? messages[key][lang] : key;
+}
 
 function showToast(type, msgKey) {
   const icon = document.getElementById('toastIcon');
@@ -23,7 +43,10 @@ function showToast(type, msgKey) {
   setTimeout(() => window.close(), 800);
 }
 
-chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+chrome.storage.local.get({ language: 'auto' }, function(settings) {
+  userLang = settings.language;
+  
+  chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
   const tab = tabs[0];
   if (!tab || !tab.url) {
     showToast('remove', 'cannotGetPage');
@@ -72,5 +95,6 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
         showToast('success', 'bookmarked');
       });
     }
+  });
   });
 });

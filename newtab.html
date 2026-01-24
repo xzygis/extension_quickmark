@@ -29,13 +29,8 @@
         <button class="view-btn" data-view="list" data-i18n-title="viewList">☰</button>
         <button class="view-btn" data-view="headline" data-i18n-title="viewHeadline">≡</button>
       </div>
-      <select class="sort-select" id="sortSelect">
-        <option value="recent" data-i18n="sortRecent"></option>
-        <option value="alpha" data-i18n="sortAlpha"></option>
-        <option value="clicks" data-i18n="sortClicks"></option>
-      </select>
-      <button class="header-btn" id="batchBtn">☑ <span data-i18n="batchMode"></span></button>
-      <button class="header-btn" id="settingsBtn" title="Settings">⚙️</button>
+      <button class="header-btn icon-btn" id="batchBtn" data-i18n-title="batchMode">☑</button>
+      <button class="header-btn icon-btn" id="settingsBtn" data-i18n-title="settings">⚙</button>
     </div>
   </div>
 
@@ -115,12 +110,11 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label" data-i18n="selectGroup"></label>
-          <select class="form-input" id="moveGroupSelect"></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="orCreateNew"></label>
-          <input type="text" class="form-input" id="newGroupInput" data-i18n-placeholder="newGroup">
+          <label class="form-label" data-i18n="group"></label>
+          <div class="tag-input-wrapper" id="moveGroupWrapper">
+            <input type="text" class="tag-input" id="moveGroupInput" autocomplete="off">
+            <div class="combo-dropdown" id="moveGroupDropdown"></div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -140,7 +134,8 @@
         <div class="form-group">
           <label class="form-label" data-i18n="tags"></label>
           <div class="tag-input-wrapper" id="batchTagsWrapper">
-            <input type="text" class="tag-input" id="batchTagInput" data-i18n-placeholder="addTag">
+            <input type="text" class="tag-input" id="batchTagInput" autocomplete="off">
+            <div class="combo-dropdown tag-dropdown" id="batchTagDropdown"></div>
           </div>
         </div>
       </div>

@@ -173,6 +173,9 @@
   "pleaseEnterTag": {
     "message": "Please enter a tag"
   },
+  "pleaseSelectGroup": {
+    "message": "Please select or enter a group"
+  },
   "timeJustNow": {
     "message": "Just now"
   },

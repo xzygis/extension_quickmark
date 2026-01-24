@@ -173,6 +173,9 @@
   "pleaseEnterTag": {
     "message": "请输入标签"
   },
+  "pleaseSelectGroup": {
+    "message": "请选择或输入分组"
+  },
   "timeJustNow": {
     "message": "刚刚"
   },
