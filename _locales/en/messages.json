@@ -1,0 +1,194 @@
+{
+  "extName": {
+    "message": "QuickMark"
+  },
+  "extDescription": {
+    "message": "Quick bookmark manager for your browser"
+  },
+  "emptyTitle": {
+    "message": "No bookmarks yet"
+  },
+  "emptyDesc": {
+    "message": "Click the QuickMark icon in your browser toolbar to start bookmarking"
+  },
+  "selected": {
+    "message": "selected"
+  },
+  "url": {
+    "message": "URL"
+  },
+  "addNote": {
+    "message": "Add a note..."
+  },
+  "orCreateNew": {
+    "message": "Or create new group"
+  },
+  "searchPlaceholder": {
+    "message": "Search bookmarks..."
+  },
+  "tagFilterLabel": {
+    "message": "Filter by tag:"
+  },
+  "clearFilter": {
+    "message": "Clear"
+  },
+  "sortRecent": {
+    "message": "Recent"
+  },
+  "sortAlpha": {
+    "message": "By Name"
+  },
+  "sortClicks": {
+    "message": "Most Visited"
+  },
+  "batchMode": {
+    "message": "Batch"
+  },
+  "export": {
+    "message": "Export"
+  },
+  "import": {
+    "message": "Import"
+  },
+  "edit": {
+    "message": "Edit"
+  },
+  "delete": {
+    "message": "Delete"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "save": {
+    "message": "Save"
+  },
+  "confirm": {
+    "message": "Confirm"
+  },
+  "editBookmark": {
+    "message": "Edit Bookmark"
+  },
+  "title": {
+    "message": "Title"
+  },
+  "group": {
+    "message": "Group"
+  },
+  "tags": {
+    "message": "Tags"
+  },
+  "note": {
+    "message": "Note"
+  },
+  "addTag": {
+    "message": "Add tag, press Enter"
+  },
+  "moveToGroup": {
+    "message": "Move to Group"
+  },
+  "selectGroup": {
+    "message": "Select group"
+  },
+  "newGroup": {
+    "message": "New group name"
+  },
+  "addTags": {
+    "message": "Add Tags"
+  },
+  "saved": {
+    "message": "Saved"
+  },
+  "deleted": {
+    "message": "Deleted"
+  },
+  "moved": {
+    "message": "Moved"
+  },
+  "tagsAdded": {
+    "message": "Tags added"
+  },
+  "exportSuccess": {
+    "message": "Export successful"
+  },
+  "importSuccess": {
+    "message": "Imported {count} bookmarks"
+  },
+  "importFailed": {
+    "message": "Import failed"
+  },
+  "confirmDelete": {
+    "message": "Delete {count} bookmark(s)?"
+  },
+  "bookmarked": {
+    "message": "Bookmarked"
+  },
+  "unbookmarked": {
+    "message": "Removed"
+  },
+  "cannotGetPage": {
+    "message": "Cannot get page"
+  },
+  "pageNotSupported": {
+    "message": "Page not supported"
+  },
+  "processing": {
+    "message": "Processing..."
+  },
+  "ungrouped": {
+    "message": "Ungrouped"
+  },
+  "searchResults": {
+    "message": "Search Results"
+  },
+  "viewCard": {
+    "message": "Card View"
+  },
+  "viewList": {
+    "message": "List View"
+  },
+  "viewHeadline": {
+    "message": "Headline View"
+  },
+  "batchDelete": {
+    "message": "Delete"
+  },
+  "batchMove": {
+    "message": "Move"
+  },
+  "batchTag": {
+    "message": "Tag"
+  },
+  "selectAll": {
+    "message": "All"
+  },
+  "exitBatch": {
+    "message": "Exit"
+  },
+  "language": {
+    "message": "Language"
+  },
+  "pleaseEnterTag": {
+    "message": "Please enter a tag"
+  },
+  "timeJustNow": {
+    "message": "Just now"
+  },
+  "timeMinutesAgo": {
+    "message": "{n}m ago"
+  },
+  "timeHoursAgo": {
+    "message": "{n}h ago"
+  },
+  "timeDaysAgo": {
+    "message": "{n}d ago"
+  },
+  "timeWeeksAgo": {
+    "message": "{n}w ago"
+  },
+  "timeMonthsAgo": {
+    "message": "{n}mo ago"
+  },
+  "timeYearsAgo": {
+    "message": "{n}y ago"
+  }
+}

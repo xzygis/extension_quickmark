@@ -1,77 +1,76 @@
-function updateButton(isBookmarked) {
-  const btn = document.getElementById('saveBtn');
-  if (isBookmarked) {
-    btn.innerText = '取消收藏';
-    btn.classList.add('cancel');
+const i18n = (key) => chrome.i18n.getMessage(key) || key;
+
+function showToast(type, msgKey) {
+  const icon = document.getElementById('toastIcon');
+  const textEl = document.getElementById('toastText');
+  const container = document.querySelector('.toast-container');
+  
+  container.className = 'toast-container';
+  
+  if (type === 'success') {
+    icon.innerHTML = '✓';
+    container.classList.add('toast-success');
+  } else if (type === 'remove') {
+    icon.innerHTML = '✕';
+    container.classList.add('toast-remove');
   } else {
-    btn.innerText = '一键收藏';
-    btn.classList.remove('cancel');
+    icon.innerHTML = '⋯';
+    container.classList.add('toast-loading');
   }
-}
-
-function checkAndSetButton(url) {
-  chrome.storage.local.get({ bookmarks: [] }, function(data) {
-    const bookmarks = data.bookmarks;
-    updateButton(bookmarks.some(b => b.url === url));
-  });
-}
-
-function showStatus(message) {
-  const status = document.getElementById('status');
-  status.innerText = message;
-  setTimeout(() => {
-    status.innerText = '';
-  }, 2000);
+  
+  textEl.textContent = i18n(msgKey);
+  
+  setTimeout(() => window.close(), 800);
 }
 
 chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
   const tab = tabs[0];
-  if (!tab) return;
-  checkAndSetButton(tab.url);
+  if (!tab || !tab.url) {
+    showToast('remove', 'cannotGetPage');
+    return;
+  }
 
-  document.getElementById('saveBtn').onclick = function() {
-    chrome.storage.local.get({ bookmarks: [] }, function(data) {
-      const bookmarks = data.bookmarks;
-      const idx = bookmarks.findIndex(b => b.url === tab.url);
-      if (idx !== -1) {
-        // 已收藏，直接取消收藏
-        bookmarks.splice(idx, 1);
-        chrome.storage.local.set({ bookmarks }, function() {
-          showStatus('已取消收藏');
-          updateButton(false);
-        });
-      } else {
-        // 未收藏，添加
-        const favicon = tab.favIconUrl || '';
-        const newUrlHostname = (new URL(tab.url)).hostname;
-        let targetGroup = newUrlHostname; // 默认使用新网页的域名作为分组
+  if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+    showToast('remove', 'pageNotSupported');
+    return;
+  }
 
-        // 优先查找完整域名分组
-        for (const existingB of bookmarks) {
-          try {
-            const existingHostname = (new URL(existingB.url)).hostname;
-            if (existingHostname === newUrlHostname) {
-              targetGroup = existingB.group; // 使用已存在的分组名
-              break;
-            }
-          } catch (e) {
-            console.warn("Error parsing existing bookmark URL:", existingB.url, e);
+  chrome.storage.local.get({ bookmarks: [] }, function(data) {
+    const bookmarks = data.bookmarks;
+    const idx = bookmarks.findIndex(b => b.url === tab.url);
+    
+    if (idx !== -1) {
+      bookmarks.splice(idx, 1);
+      chrome.storage.local.set({ bookmarks }, function() {
+        showToast('remove', 'unbookmarked');
+      });
+    } else {
+      const favicon = tab.favIconUrl || '';
+      const newUrlHostname = (new URL(tab.url)).hostname;
+      let targetGroup = newUrlHostname;
+
+      for (const existingB of bookmarks) {
+        try {
+          const existingHostname = (new URL(existingB.url)).hostname;
+          if (existingHostname === newUrlHostname) {
+            targetGroup = existingB.group;
+            break;
           }
-        }
-
-        bookmarks.push({
-          id: Date.now() + Math.random().toString(36).substr(2, 5),
-          url: tab.url,
-          title: tab.title,
-          favicon,
-          group: targetGroup, // 使用找到的或默认的分组名
-          createdAt: Date.now()
-        });
-        chrome.storage.local.set({ bookmarks }, function() {
-          showStatus('收藏成功！');
-          updateButton(true);
-        });
+        } catch (e) {}
       }
-    });
-  };
-}); 
+
+      bookmarks.push({
+        id: Date.now() + Math.random().toString(36).substr(2, 5),
+        url: tab.url,
+        title: tab.title,
+        favicon,
+        group: targetGroup,
+        createdAt: Date.now()
+      });
+      
+      chrome.storage.local.set({ bookmarks }, function() {
+        showToast('success', 'bookmarked');
+      });
+    }
+  });
+});

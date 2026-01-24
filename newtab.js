@@ -1,324 +1,111 @@
-let cachedGroupOrder = null;
-let isEditingTitle = false;
-let resizeTimer = null;
-let searchTimer = null;
+const GROUP_COLORS = ['#4f8cff', '#52c41a', '#faad14', '#ff4d4f', '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16'];
+let bookmarks = [];
+let selectedIds = new Set();
+let currentView = 'card';
+let currentSort = 'recent';
+let activeTagFilter = null;
+let batchMode = false;
+let editingBookmarkId = null;
+let groupOrder = [];
+let draggedGroup = null;
+let currentLang = 'auto';
 
-function escapeHtml(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
+const messages = {
+  en: {},
+  zh_CN: {}
+};
 
-function debounce(fn, delay) {
-  let timer = null;
-  return function(...args) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), delay);
-  };
-}
-
-function getColumnCount() {
-  const containerWidth = document.getElementById('masonry').offsetWidth;
-  const groupElement = document.querySelector('.group');
-  let groupOuterWidth = 260 + 12; // 默认值
-  if (groupElement) {
-    const style = window.getComputedStyle(groupElement);
-    groupOuterWidth = groupElement.offsetWidth + parseFloat(style.marginRight) + parseFloat(style.marginLeft);
+async function loadMessages() {
+  try {
+    const [enRes, zhRes] = await Promise.all([
+      fetch(chrome.runtime.getURL('_locales/en/messages.json')),
+      fetch(chrome.runtime.getURL('_locales/zh_CN/messages.json'))
+    ]);
+    messages.en = await enRes.json();
+    messages.zh_CN = await zhRes.json();
+  } catch (e) {
+    console.error('Failed to load messages:', e);
   }
-  if (groupOuterWidth <= 0) groupOuterWidth = 272;
-  return Math.max(1, Math.floor(containerWidth / groupOuterWidth));
 }
 
-function getSortedGroups(groups, bookmarks) {
-  if (!cachedGroupOrder) {
-    const groupStats = Object.keys(groups).map(group => {
-      const items = groups[group];
-      const totalClicks = items.reduce((sum, b) => sum + (b.clickCount || 0), 0);
-      return { group, totalClicks, count: items.length };
-    });
-    groupStats.sort((a, b) => {
-      if (b.totalClicks !== a.totalClicks) return b.totalClicks - a.totalClicks;
-      if (b.count !== a.count) return b.count - a.count;
-      return a.group.localeCompare(b.group);
-    });
-    cachedGroupOrder = groupStats.map(g => g.group);
+function getEffectiveLang() {
+  if (currentLang === 'auto') {
+    const browserLang = navigator.language || navigator.userLanguage;
+    if (browserLang.startsWith('zh')) return 'zh_CN';
+    return 'en';
   }
-  return cachedGroupOrder.filter(g => groups[g]);
+  return currentLang;
 }
 
-function render() {
-  chrome.storage.local.get({ bookmarks: [] }, function(data) {
-    let bookmarks = data.bookmarks;
-    // 按 group 分组
-    const groups = {};
-    bookmarks.forEach(b => {
-      if (!groups[b.group]) groups[b.group] = [];
-      groups[b.group].push(b);
-    });
+function i18n(key) {
+  const lang = getEffectiveLang();
+  const msg = messages[lang]?.[key]?.message || messages.en?.[key]?.message || key;
+  return msg;
+}
 
-    // Masonry分配：使每列网页总数尽量接近
-    const container = document.getElementById('masonry');
-    container.innerHTML = '';
-    // 动态计算列数和宽度
-    let minGroupWidth = 260;
-    const containerWidth = container.offsetWidth;
-    let maxCols = Math.max(1, Math.floor(containerWidth / minGroupWidth));
-    let cols = Array.from({ length: maxCols }, () => []);
-    let colPageCounts = Array(maxCols).fill(0);
-    const sortedGroups = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
-    // 先将最大N个分组分别分配到每一列
-    for (let i = 0; i < Math.min(maxCols, sortedGroups.length); i++) {
-      cols[i].push(sortedGroups[i]);
-      colPageCounts[i] += groups[sortedGroups[i]].length;
-    }
-    // 剩余分组再用贪心法分配
-    for (let i = maxCols; i < sortedGroups.length; i++) {
-      let minIdx = colPageCounts.indexOf(Math.min(...colPageCounts));
-      cols[minIdx].push(sortedGroups[i]);
-      colPageCounts[minIdx] += groups[sortedGroups[i]].length;
-    }
-    // 渲染每一列
-    cols.forEach(colGroups => {
-      const colDiv = document.createElement('div');
-      colDiv.className = 'masonry-col';
-      colGroups.forEach(group => {
-        // 分组渲染逻辑
-        const groupDiv = document.createElement('div');
-        groupDiv.className = 'group';
-        groupDiv.dataset.group = group;
-        // 分组名可编辑
-        const title = document.createElement('div');
-        title.className = 'group-title';
-        title.innerText = group;
-        title.title = '点击编辑分组名';
-        title.onclick = function() {
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.value = title.innerText;
-          input.className = 'edit-input';
-          input.onblur = input.onkeydown = function(e) {
-            if (e.type === 'blur' || e.key === 'Enter') {
-              const newGroup = input.value.trim() || group;
-              if (newGroup !== group) {
-                bookmarks.forEach(b => {
-                  if (b.group === group) b.group = newGroup;
-                });
-                cachedGroupOrder = null;
-                chrome.storage.local.set({ bookmarks }, render);
-              } else {
-                title.innerText = group;
-              }
-            }
-          };
-          title.innerText = '';
-          title.appendChild(input);
-          input.focus();
-          input.select();
-        };
-        groupDiv.appendChild(title);
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    el.textContent = i18n(key);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    el.placeholder = i18n(key);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    el.title = i18n(key);
+  });
+}
 
-        const listDiv = document.createElement('div');
-        listDiv.className = 'bookmark-list';
-        groups[group].forEach((b, idx) => {
-          const card = document.createElement('div');
-          card.className = 'bookmark-card';
-          card.draggable = true;
-          card.dataset.id = b.id;
-          card.dataset.group = group;
-          card.dataset.idx = idx;
-          const link = document.createElement('a');
-          link.href = b.url;
-          link.className = 'bookmark-link';
-          link.tabIndex = -1;
-          
-          const img = document.createElement('img');
-          img.src = b.favicon || 'icon16.png';
-          img.onerror = function() { this.src = 'icon16.png'; };
-          
-          const titleSpan = document.createElement('span');
-          titleSpan.className = 'bookmark-title';
-          titleSpan.title = '点击编辑网页名';
-          titleSpan.textContent = b.title;
-          
-          link.appendChild(img);
-          link.appendChild(titleSpan);
-          
-          const urlDiv = document.createElement('div');
-          urlDiv.className = 'bookmark-url';
-          urlDiv.title = b.url;
-          urlDiv.textContent = b.url;
-          
-          const delBtn = document.createElement('button');
-          delBtn.className = 'delBtn';
-          delBtn.dataset.id = b.id;
-          delBtn.textContent = '删除';
-          
-          card.appendChild(link);
-          card.appendChild(urlDiv);
-          card.appendChild(delBtn);
-          // 编辑网页名
-          card.querySelector('.bookmark-title').onclick = function(e) {
-            e.stopPropagation();
-            e.preventDefault();
-            isEditingTitle = true;
-            const span = this;
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = b.title;
-            input.className = 'edit-input';
-            input.onblur = input.onkeydown = function(e2) {
-              if (e2.type === 'blur' || e2.key === 'Enter') {
-                isEditingTitle = false;
-                const newTitle = input.value.trim() || b.title;
-                if (newTitle !== b.title) {
-                  b.title = newTitle;
-                  chrome.storage.local.set({ bookmarks }, render);
-                } else {
-                  span.innerText = b.title;
-                }
-              }
-            };
-            span.innerText = '';
-            span.appendChild(input);
-            input.focus();
-            input.select();
-          };
-          // 统计点击，不跳转
-          card.querySelector('.bookmark-link').onclick = function(e) {
-            e.preventDefault();
-            b.clickCount = (b.clickCount || 0) + 1;
-            chrome.storage.local.set({ bookmarks });
-          };
-          // 整个卡片点击跳转（除网页名span外）
-          card.addEventListener('click', function(e) {
-            if (isEditingTitle) return;
-            // 如果点击的是网页名span、输入框、删除按钮、a标签及其子元素，不跳转
-            const notJumpSelectors = ['.bookmark-title', 'input', '.delBtn', '.bookmark-link'];
-            for (const sel of notJumpSelectors) {
-              if (e.target.closest && e.target.closest(sel)) return;
-            }
-            window.location.href = b.url;
-          }, true);
-          // 拖拽事件
-          card.ondragstart = function(e) {
-            card.classList.add('dragging');
-            e.dataTransfer.setData('text/plain', JSON.stringify({
-              id: b.id,
-              fromGroup: group,
-              fromIdx: idx
-            }));
-          };
-          card.ondragend = function() {
-            card.classList.remove('dragging');
-          };
-          card.ondragover = function(e) {
-            e.preventDefault();
-            card.style.background = '#e6f0ff';
-          };
-          card.ondragleave = function() {
-            card.style.background = '';
-          };
-          card.ondrop = function(e) {
-            e.preventDefault();
-            card.style.background = '';
-            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-            if (data.id === b.id) return;
-            if (data.fromGroup === group) {
-              const arr = groups[group];
-              const from = arr.findIndex(x => x.id === data.id);
-              const to = idx;
-              if (from !== -1 && from !== to) {
-                const [moved] = arr.splice(from, 1);
-                arr.splice(to, 0, moved);
-                bookmarks = [];
-                Object.values(groups).forEach(g => bookmarks.push(...g));
-                chrome.storage.local.set({ bookmarks }, render);
-              }
-            } else {
-              const fromArr = groups[data.fromGroup];
-              const toArr = groups[group];
-              const fromIdx = fromArr.findIndex(x => x.id === data.id);
-              if (fromIdx !== -1) {
-                const [moved] = fromArr.splice(fromIdx, 1);
-                moved.group = group;
-                toArr.splice(idx, 0, moved);
-                bookmarks = [];
-                Object.values(groups).forEach(g => bookmarks.push(...g));
-                chrome.storage.local.set({ bookmarks }, render);
-              }
-            }
-          };
-          listDiv.appendChild(card);
-        });
-        listDiv.ondragover = function(e) {
-          e.preventDefault();
-          listDiv.style.background = '#e6f0ff';
-        };
-        listDiv.ondragleave = function() {
-          listDiv.style.background = '';
-        };
-        listDiv.ondrop = function(e) {
-          e.preventDefault();
-          listDiv.style.background = '';
-          const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-          if (data.fromGroup !== group) {
-            const fromArr = groups[data.fromGroup];
-            const toArr = groups[group];
-            const fromIdx = fromArr.findIndex(x => x.id === data.id);
-            if (fromIdx !== -1) {
-              const [moved] = fromArr.splice(fromIdx, 1);
-              moved.group = group;
-              toArr.push(moved);
-              bookmarks = [];
-              Object.values(groups).forEach(g => bookmarks.push(...g));
-              chrome.storage.local.set({ bookmarks }, render);
-            }
-          }
-        };
-        groupDiv.appendChild(listDiv);
-        colDiv.appendChild(groupDiv);
+function getGroupColor(groupName) {
+  let hash = 0;
+  for (let i = 0; i < groupName.length; i++) {
+    hash = groupName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return GROUP_COLORS[Math.abs(hash) % GROUP_COLORS.length];
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return '';
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const week = 7 * day;
+  const month = 30 * day;
+  const year = 365 * day;
+  
+  if (diff < minute) return i18n('timeJustNow');
+  if (diff < hour) return i18n('timeMinutesAgo').replace('{n}', Math.floor(diff / minute));
+  if (diff < day) return i18n('timeHoursAgo').replace('{n}', Math.floor(diff / hour));
+  if (diff < week) return i18n('timeDaysAgo').replace('{n}', Math.floor(diff / day));
+  if (diff < month) return i18n('timeWeeksAgo').replace('{n}', Math.floor(diff / week));
+  if (diff < year) return i18n('timeMonthsAgo').replace('{n}', Math.floor(diff / month));
+  return i18n('timeYearsAgo').replace('{n}', Math.floor(diff / year));
+}
+
+function getDomain(url) {
+  try {
+    return new URL(url).hostname.replace('www.', '');
+  } catch {
+    return url;
+  }
+}
+
+function getAllTags() {
+  const tagCount = {};
+  bookmarks.forEach(b => {
+    if (b.tags && Array.isArray(b.tags)) {
+      b.tags.forEach(t => {
+        tagCount[t] = (tagCount[t] || 0) + 1;
       });
-      container.appendChild(colDiv);
-    });
-
-    document.querySelectorAll('.delBtn').forEach(btn => {
-      btn.onclick = function() {
-        if (!confirm('确定要删除这个收藏吗？')) return;
-        const id = this.getAttribute('data-id');
-        bookmarks = bookmarks.filter(b => b.id !== id);
-        chrome.storage.local.set({ bookmarks }, render);
-      };
-    });
+    }
   });
+  return Object.entries(tagCount).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-window.addEventListener('resize', function() {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    cachedGroupOrder = null;
-    render();
-  }, 200);
-});
-
-// ======= 导出/导入功能 =======
-function exportBookmarks() {
-  chrome.storage.local.get({ bookmarks: [] }, function(data) {
-    const blob = new Blob([JSON.stringify(data.bookmarks, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'quickmark_bookmarks.json';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
-  });
-}
-
-// 美观的提示条
 function showTip(msg, type = 'success') {
   let tip = document.getElementById('quickmark-tip');
   if (!tip) {
@@ -326,46 +113,650 @@ function showTip(msg, type = 'success') {
     tip.id = 'quickmark-tip';
     document.body.appendChild(tip);
   }
-  tip.innerText = msg;
+  tip.textContent = msg;
   tip.className = 'quickmark-tip ' + (type === 'error' ? 'quickmark-tip-error' : 'quickmark-tip-success');
-  tip.style.display = 'block';
+  tip.style.opacity = '1';
+  setTimeout(() => { tip.style.opacity = '0'; }, 2000);
+}
+
+function saveBookmarks(callback) {
+  chrome.storage.local.set({ bookmarks, groupOrder }, callback);
+}
+
+function loadBookmarks(callback) {
+  chrome.storage.local.get({ bookmarks: [], groupOrder: [], viewMode: 'card', sortMode: 'recent', lang: 'auto' }, (data) => {
+    bookmarks = data.bookmarks;
+    groupOrder = data.groupOrder || [];
+    currentView = data.viewMode || 'card';
+    currentSort = data.sortMode || 'recent';
+    currentLang = data.lang || 'auto';
+    if (callback) callback();
+  });
+}
+
+function getLastActiveTime(b) {
+  return b.lastActiveAt || b.createdAt || 0;
+}
+
+function sortBookmarks(items) {
+  const sorted = [...items];
+  switch (currentSort) {
+    case 'recent':
+      sorted.sort((a, b) => getLastActiveTime(b) - getLastActiveTime(a));
+      break;
+    case 'alpha':
+      sorted.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+      break;
+    case 'clicks':
+      sorted.sort((a, b) => (b.clickCount || 0) - (a.clickCount || 0));
+      break;
+  }
+  return sorted;
+}
+
+function filterByTag(items) {
+  if (!activeTagFilter) return items;
+  return items.filter(b => b.tags && b.tags.includes(activeTagFilter));
+}
+
+function groupBookmarks() {
+  const groups = {};
+  filterByTag(bookmarks).forEach(b => {
+    const g = b.group || i18n('ungrouped');
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(b);
+  });
+  
+  Object.keys(groups).forEach(g => {
+    groups[g] = [...groups[g]].sort((a, b) => getLastActiveTime(b) - getLastActiveTime(a));
+  });
+  
+  const existingGroups = Object.keys(groups);
+  const orderedGroups = [];
+  
+  groupOrder.forEach(g => {
+    if (groups[g]) orderedGroups.push(g);
+  });
+  
+  existingGroups.forEach(g => {
+    if (!orderedGroups.includes(g)) orderedGroups.push(g);
+  });
+  
+  return { groups, orderedGroups };
+}
+
+function renderTagFilter() {
+  const tags = getAllTags();
+  const toolbar = document.getElementById('tagToolbar');
+  const filter = document.getElementById('tagFilter');
+  const clearBtn = document.getElementById('clearTagFilter');
+  
+  if (tags.length === 0) {
+    toolbar.style.display = 'none';
+    return;
+  }
+  
+  toolbar.style.display = 'flex';
+  filter.innerHTML = tags.map(([tag, count]) => `
+    <span class="tag-chip ${activeTagFilter === tag ? 'active' : ''}" data-tag="${tag}">
+      #${tag} <span class="tag-count">${count}</span>
+    </span>
+  `).join('');
+  
+  clearBtn.style.display = activeTagFilter ? 'block' : 'none';
+  
+  filter.querySelectorAll('.tag-chip').forEach(chip => {
+    chip.onclick = () => {
+      const tag = chip.dataset.tag;
+      activeTagFilter = activeTagFilter === tag ? null : tag;
+      render();
+    };
+  });
+  
+  clearBtn.onclick = () => {
+    activeTagFilter = null;
+    render();
+  };
+}
+
+function createBookmarkCard(b) {
+  const card = document.createElement('div');
+  card.className = 'bookmark-card' + (selectedIds.has(b.id) ? ' selected' : '') + ' view-' + currentView;
+  card.dataset.id = b.id;
+  card.draggable = true;
+  
+  const tagsHtml = b.tags && b.tags.length > 0 
+    ? `<div class="bookmark-tags">${b.tags.map(t => `<span class="bookmark-tag">#${t}</span>`).join('')}</div>` 
+    : '';
+  
+  const noteHtml = b.note 
+    ? `<div class="bookmark-note">${b.note}</div>` 
+    : '';
+  
+  const activeTime = formatTime(getLastActiveTime(b));
+  
+  let cardContent = '';
+  
+  if (currentView === 'headline') {
+    cardContent = `
+      <input type="checkbox" class="bookmark-checkbox" ${selectedIds.has(b.id) ? 'checked' : ''}>
+      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}" onerror="this.src='icon16.png'">
+      <div class="bookmark-content">
+        <div class="bookmark-title" title="${b.title}">${b.title}</div>
+      </div>
+      <div class="bookmark-actions">
+        <button class="bookmark-action-btn edit-btn" title="编辑">✏️</button>
+        <button class="bookmark-action-btn danger delete-btn" title="删除">🗑️</button>
+      </div>
+    `;
+  } else if (currentView === 'list') {
+    cardContent = `
+      <input type="checkbox" class="bookmark-checkbox" ${selectedIds.has(b.id) ? 'checked' : ''}>
+      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}" onerror="this.src='icon16.png'">
+      <div class="bookmark-content">
+        <div class="bookmark-title" title="${b.title}">${b.title}</div>
+        <div class="bookmark-meta">
+          <span class="bookmark-domain">${getDomain(b.url)}</span>
+          <span class="bookmark-time">${activeTime}</span>
+        </div>
+      </div>
+      <div class="bookmark-actions">
+        <button class="bookmark-action-btn edit-btn" title="编辑">✏️</button>
+        <button class="bookmark-action-btn danger delete-btn" title="删除">🗑️</button>
+      </div>
+    `;
+  } else {
+    cardContent = `
+      <input type="checkbox" class="bookmark-checkbox" ${selectedIds.has(b.id) ? 'checked' : ''}>
+      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}" onerror="this.src='icon16.png'">
+      <div class="bookmark-content">
+        <div class="bookmark-title" title="${b.title}">${b.title}</div>
+        <div class="bookmark-meta">
+          <span class="bookmark-domain">${getDomain(b.url)}</span>
+          <span class="bookmark-time">${activeTime}</span>
+        </div>
+        ${tagsHtml}
+        ${noteHtml}
+      </div>
+      <div class="bookmark-actions">
+        <button class="bookmark-action-btn edit-btn" title="编辑">✏️</button>
+        <button class="bookmark-action-btn danger delete-btn" title="删除">🗑️</button>
+      </div>
+    `;
+  }
+  
+  card.innerHTML = cardContent;
+  
+  if (batchMode) {
+    card.classList.add('batch-mode');
+  }
+  
+  const checkbox = card.querySelector('.bookmark-checkbox');
+  checkbox.onclick = (e) => {
+    e.stopPropagation();
+    if (checkbox.checked) {
+      selectedIds.add(b.id);
+      card.classList.add('selected');
+    } else {
+      selectedIds.delete(b.id);
+      card.classList.remove('selected');
+    }
+    updateBatchToolbar();
+  };
+  
+  card.querySelector('.edit-btn').onclick = (e) => {
+    e.stopPropagation();
+    openEditModal(b);
+  };
+  
+  card.querySelector('.delete-btn').onclick = (e) => {
+    e.stopPropagation();
+    bookmarks = bookmarks.filter(x => x.id !== b.id);
+    saveBookmarks(() => {
+      showTip(i18n('deleted'));
+      render();
+    });
+  };
+  
+  card.onclick = (e) => {
+    if (batchMode) {
+      checkbox.checked = !checkbox.checked;
+      checkbox.onclick({ stopPropagation: () => {} });
+      return;
+    }
+    if (e.target.closest('.bookmark-actions') || e.target.closest('.bookmark-checkbox')) return;
+    
+    b.clickCount = (b.clickCount || 0) + 1;
+    b.lastActiveAt = Date.now();
+    saveBookmarks();
+    window.location.href = b.url;
+  };
+  
+  card.ondragstart = (e) => {
+    card.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', JSON.stringify({ id: b.id, fromGroup: b.group }));
+  };
+  
+  card.ondragend = () => card.classList.remove('dragging');
+  
+  return card;
+}
+
+function createGroupElement(groupName, items) {
+  const group = document.createElement('div');
+  group.className = 'group';
+  group.dataset.group = groupName;
+  
+  const color = getGroupColor(groupName);
+  
+  group.innerHTML = `
+    <div class="group-header">
+      <div class="group-title-wrapper">
+        <div class="group-color" style="background: ${color}"></div>
+        <span class="group-title">${groupName}</span>
+        <span class="group-count">${items.length}</span>
+      </div>
+      <div class="group-actions">
+        <button class="group-action-btn rename-btn" title="重命名">✏️</button>
+      </div>
+    </div>
+    <div class="bookmark-list"></div>
+  `;
+  
+  const header = group.querySelector('.group-header');
+  header.draggable = true;
+  
+  header.ondragstart = (e) => {
+    draggedGroup = groupName;
+    group.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'group', groupName }));
+  };
+  
+  header.ondragend = () => {
+    draggedGroup = null;
+    group.classList.remove('dragging');
+  };
+  
+  header.ondragover = (e) => {
+    e.preventDefault();
+    if (draggedGroup && draggedGroup !== groupName) {
+      group.style.outline = '2px dashed var(--primary)';
+    }
+  };
+  
+  header.ondragleave = () => {
+    group.style.outline = '';
+  };
+  
+  header.ondrop = (e) => {
+    e.preventDefault();
+    group.style.outline = '';
+    
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      
+      if (data.type === 'group' && data.groupName !== groupName) {
+        const fromIdx = groupOrder.indexOf(data.groupName);
+        const toIdx = groupOrder.indexOf(groupName);
+        
+        if (fromIdx === -1) {
+          groupOrder.push(data.groupName);
+        }
+        if (toIdx === -1) {
+          groupOrder.push(groupName);
+        }
+        
+        const newFromIdx = groupOrder.indexOf(data.groupName);
+        const newToIdx = groupOrder.indexOf(groupName);
+        
+        groupOrder.splice(newFromIdx, 1);
+        groupOrder.splice(newToIdx, 0, data.groupName);
+        
+        saveBookmarks(render);
+      } else if (data.id) {
+        const bookmark = bookmarks.find(b => b.id === data.id);
+        if (bookmark && bookmark.group !== groupName) {
+          bookmark.group = groupName;
+          saveBookmarks(render);
+        }
+      }
+    } catch {}
+  };
+  
+  group.querySelector('.rename-btn').onclick = () => {
+    const titleEl = group.querySelector('.group-title');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = groupName;
+    input.className = 'edit-input';
+    
+    const finishEdit = () => {
+      const newName = input.value.trim();
+      if (newName && newName !== groupName) {
+        bookmarks.forEach(b => {
+          if (b.group === groupName) b.group = newName;
+        });
+        const idx = groupOrder.indexOf(groupName);
+        if (idx !== -1) groupOrder[idx] = newName;
+        saveBookmarks(render);
+      } else {
+        titleEl.textContent = groupName;
+      }
+    };
+    
+    input.onblur = finishEdit;
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') finishEdit();
+      if (e.key === 'Escape') {
+        titleEl.textContent = groupName;
+      }
+    };
+    
+    titleEl.textContent = '';
+    titleEl.appendChild(input);
+    input.focus();
+    input.select();
+  };
+  
+  const list = group.querySelector('.bookmark-list');
+  items.forEach(b => list.appendChild(createBookmarkCard(b)));
+  
+  list.ondragover = (e) => {
+    e.preventDefault();
+    list.style.background = 'var(--bg)';
+  };
+  
+  list.ondragleave = () => {
+    list.style.background = '';
+  };
+  
+  list.ondrop = (e) => {
+    e.preventDefault();
+    list.style.background = '';
+    
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      if (data.id && data.fromGroup !== groupName) {
+        const bookmark = bookmarks.find(b => b.id === data.id);
+        if (bookmark) {
+          bookmark.group = groupName;
+          saveBookmarks(render);
+        }
+      }
+    } catch {}
+  };
+  
+  return group;
+}
+
+function render() {
+  const container = document.getElementById('masonry');
+  const emptyState = document.getElementById('emptyState');
+  
+  renderTagFilter();
+  
+  const filtered = filterByTag(bookmarks);
+  
+  if (filtered.length === 0) {
+    container.innerHTML = '';
+    emptyState.style.display = 'block';
+    return;
+  }
+  
+  emptyState.style.display = 'none';
+  
+  const { groups, orderedGroups } = groupBookmarks();
+  
+  const containerWidth = container.offsetWidth;
+  const colCount = Math.max(1, Math.floor(containerWidth / 300));
+  const cols = Array.from({ length: colCount }, () => []);
+  const colHeights = Array(colCount).fill(0);
+  
+  orderedGroups.forEach(groupName => {
+    const items = groups[groupName];
+    const minIdx = colHeights.indexOf(Math.min(...colHeights));
+    cols[minIdx].push({ groupName, items });
+    colHeights[minIdx] += items.length + 1;
+  });
+  
+  container.innerHTML = '';
+  cols.forEach(colGroups => {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'masonry-col';
+    colGroups.forEach(({ groupName, items }) => {
+      colDiv.appendChild(createGroupElement(groupName, items));
+    });
+    container.appendChild(colDiv);
+  });
+  
+  updateBatchToolbar();
+}
+
+function updateBatchToolbar() {
+  const toolbar = document.getElementById('batchToolbar');
+  const count = document.getElementById('selectedCount');
+  
+  if (batchMode && selectedIds.size > 0) {
+    toolbar.classList.add('show');
+    count.textContent = selectedIds.size;
+  } else {
+    toolbar.classList.remove('show');
+  }
+}
+
+function openEditModal(bookmark) {
+  editingBookmarkId = bookmark.id;
+  
+  document.getElementById('editTitle').value = bookmark.title || '';
+  document.getElementById('editUrl').value = bookmark.url || '';
+  document.getElementById('editGroup').value = bookmark.group || '';
+  document.getElementById('editNote').value = bookmark.note || '';
+  
+  const wrapper = document.getElementById('editTagsWrapper');
+  wrapper.querySelectorAll('.tag-chip').forEach(el => el.remove());
+  
+  const input = document.getElementById('editTagInput');
+  if (bookmark.tags && bookmark.tags.length > 0) {
+    bookmark.tags.forEach(tag => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip';
+      chip.innerHTML = `#${tag} <span class="tag-remove">×</span>`;
+      chip.querySelector('.tag-remove').onclick = () => chip.remove();
+      wrapper.insertBefore(chip, input);
+    });
+  }
+  
+  document.getElementById('editModal').classList.add('show');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('show');
+  editingBookmarkId = null;
+}
+
+function saveEditModal() {
+  const bookmark = bookmarks.find(b => b.id === editingBookmarkId);
+  if (!bookmark) return;
+  
+  bookmark.title = document.getElementById('editTitle').value.trim();
+  bookmark.group = document.getElementById('editGroup').value.trim() || i18n('ungrouped');
+  bookmark.note = document.getElementById('editNote').value.trim();
+  bookmark.lastActiveAt = Date.now();
+  
+  const tags = [];
+  document.getElementById('editTagsWrapper').querySelectorAll('.tag-chip').forEach(chip => {
+    const text = chip.textContent.replace('×', '').replace('#', '').trim();
+    if (text) tags.push(text);
+  });
+  
+  const inputValue = document.getElementById('editTagInput').value.trim();
+  if (inputValue) {
+    tags.push(inputValue);
+  }
+  
+  bookmark.tags = tags;
+  
+  saveBookmarks(() => {
+    showTip(i18n('saved'));
+    closeEditModal();
+    render();
+  });
+}
+
+function setupTagInput(wrapperId, inputId) {
+  const wrapper = document.getElementById(wrapperId);
+  const input = document.getElementById(inputId);
+  
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && input.value.trim()) {
+      e.preventDefault();
+      const tag = input.value.trim();
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip';
+      chip.innerHTML = `#${tag} <span class="tag-remove">×</span>`;
+      chip.querySelector('.tag-remove').onclick = () => chip.remove();
+      wrapper.insertBefore(chip, input);
+      input.value = '';
+    }
+    
+    if (e.key === 'Backspace' && !input.value) {
+      const chips = wrapper.querySelectorAll('.tag-chip');
+      if (chips.length > 0) {
+        chips[chips.length - 1].remove();
+      }
+    }
+  };
+}
+
+function openMoveModal() {
+  const select = document.getElementById('moveGroupSelect');
+  const groups = [...new Set(bookmarks.map(b => b.group || i18n('ungrouped')))];
+  
+  select.innerHTML = groups.map(g => `<option value="${g}">${g}</option>`).join('');
+  document.getElementById('newGroupInput').value = '';
+  document.getElementById('moveModal').classList.add('show');
+}
+
+function closeMoveModal() {
+  document.getElementById('moveModal').classList.remove('show');
+}
+
+function confirmMove() {
+  const newGroup = document.getElementById('newGroupInput').value.trim() 
+    || document.getElementById('moveGroupSelect').value;
+  
+  if (!newGroup) return;
+  
+  bookmarks.forEach(b => {
+    if (selectedIds.has(b.id)) {
+      b.group = newGroup;
+    }
+  });
+  
+  saveBookmarks(() => {
+    showTip(i18n('moved'));
+    selectedIds.clear();
+    closeMoveModal();
+    render();
+  });
+}
+
+function openTagModal() {
+  const wrapper = document.getElementById('batchTagsWrapper');
+  wrapper.querySelectorAll('.tag-chip').forEach(el => el.remove());
+  document.getElementById('batchTagInput').value = '';
+  document.getElementById('tagModal').classList.add('show');
+}
+
+function closeTagModal() {
+  document.getElementById('tagModal').classList.remove('show');
+}
+
+function confirmBatchTag() {
+  const tags = [];
+  document.getElementById('batchTagsWrapper').querySelectorAll('.tag-chip').forEach(chip => {
+    const text = chip.textContent.replace('×', '').replace('#', '').trim();
+    if (text) tags.push(text);
+  });
+  
+  const inputValue = document.getElementById('batchTagInput').value.trim();
+  if (inputValue) {
+    tags.push(inputValue);
+  }
+  
+  if (tags.length === 0) {
+    showTip(i18n('pleaseEnterTag'), 'error');
+    return;
+  }
+  
+  bookmarks.forEach(b => {
+    if (selectedIds.has(b.id)) {
+      b.tags = [...new Set([...(b.tags || []), ...tags])];
+    }
+  });
+  
+  saveBookmarks(() => {
+    showTip(i18n('tagsAdded'));
+    selectedIds.clear();
+    closeTagModal();
+    render();
+  });
+}
+
+function batchDelete() {
+  bookmarks = bookmarks.filter(b => !selectedIds.has(b.id));
+  saveBookmarks(() => {
+    showTip(i18n('deleted'));
+    selectedIds.clear();
+    render();
+  });
+}
+
+function exportBookmarks() {
+  const blob = new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'quickmark_bookmarks.json';
+  document.body.appendChild(a);
+  a.click();
   setTimeout(() => {
-    tip.style.opacity = '1';
-  }, 10);
-  setTimeout(() => {
-    tip.style.opacity = '0';
-    setTimeout(() => { tip.style.display = 'none'; }, 400);
-  }, 1800);
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
 }
 
 function importBookmarks() {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.json,application/json';
-  input.onchange = function(e) {
+  input.accept = '.json';
+  input.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
     const reader = new FileReader();
-    reader.onload = function(evt) {
+    reader.onload = (evt) => {
       try {
         const imported = JSON.parse(evt.target.result);
         if (!Array.isArray(imported)) throw new Error('格式错误');
-        chrome.storage.local.get({ bookmarks: [] }, function(data) {
-          // 合并去重，按url唯一
-          const urlSet = new Set();
-          const merged = [...data.bookmarks, ...imported].filter(b => {
-            if (!b.url || urlSet.has(b.url)) return false;
+        
+        const urlSet = new Set(bookmarks.map(b => b.url));
+        let addedCount = 0;
+        
+        imported.forEach(b => {
+          if (!urlSet.has(b.url)) {
+            bookmarks.push(b);
             urlSet.add(b.url);
-            return true;
-          });
-          chrome.storage.local.set({ bookmarks: merged }, function() {
-            showTip('导入并合并成功！', 'success');
-            cachedGroupOrder = null;
-            render();
-          });
+            addedCount++;
+          }
         });
-      } catch (err) {
-        showTip('导入失败：文件格式不正确', 'error');
+        
+        saveBookmarks(() => {
+          showTip(i18n('importSuccess').replace('{count}', addedCount));
+          render();
+        });
+      } catch {
+        showTip(i18n('importFailed'), 'error');
       }
     };
     reader.readAsText(file);
@@ -373,116 +764,222 @@ function importBookmarks() {
   input.click();
 }
 
-function ensureExportImportBar() {
-  let bar = document.getElementById('exportImportBar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'exportImportBar';
-    document.querySelector('.header-bar').appendChild(bar);
-  }
-  if (!bar.hasChildNodes()) {
-    const exportBtn = document.createElement('button');
-    exportBtn.innerText = '导出收藏';
-    exportBtn.className = 'export-import-btn';
-    exportBtn.onclick = exportBookmarks;
-    
-    const importBtn = document.createElement('button');
-    importBtn.innerText = '导入收藏';
-    importBtn.className = 'export-import-btn';
-    importBtn.onclick = importBookmarks;
-    
-    bar.appendChild(exportBtn);
-    bar.appendChild(importBtn);
-  }
-}
-
-window.addEventListener('DOMContentLoaded', function() {
-  cachedGroupOrder = null;
-  ensureExportImportBar();
-  render();
-  setupSearch();
-});
-
-function renderSearchResults(results) {
-  // 先移除旧的搜索结果容器
-  let oldList = document.querySelector('.search-results-list');
-  if (oldList) oldList.remove();
-  // 主内容区
-  const mainContent = document.querySelector('.main-content');
-  const masonry = document.getElementById('masonry');
-  masonry.innerHTML = '';
-  if (results.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'search-results-list';
-    empty.style.textAlign = 'center';
-    empty.style.color = '#888';
-    empty.style.margin = '32px auto 0 auto';
-    empty.innerText = '未找到相关网页';
-    mainContent.insertBefore(empty, masonry);
-    return;
-  }
-  const list = document.createElement('div');
-  list.className = 'search-results-list';
-  results.forEach(b => {
-    const card = document.createElement('div');
-    card.className = 'bookmark-card search-result-card';
-    card.style.cursor = 'pointer';
-    
-    const link = document.createElement('a');
-    link.href = b.url;
-    link.className = 'bookmark-link';
-    link.tabIndex = -1;
-    
-    const img = document.createElement('img');
-    img.src = b.favicon || 'icon16.png';
-    img.onerror = function() { this.src = 'icon16.png'; };
-    
-    const titleSpan = document.createElement('span');
-    titleSpan.className = 'bookmark-title';
-    titleSpan.title = '点击编辑网页名';
-    titleSpan.textContent = b.title;
-    
-    link.appendChild(img);
-    link.appendChild(titleSpan);
-    
-    const urlDiv = document.createElement('div');
-    urlDiv.className = 'bookmark-url';
-    urlDiv.title = b.url;
-    urlDiv.textContent = b.url;
-    
-    card.appendChild(link);
-    card.appendChild(urlDiv);
-    
-    card.onclick = function(e) {
-      if (e.target.classList.contains('bookmark-title') || e.target.tagName === 'INPUT') return;
-      window.location.href = b.url;
-    };
-    list.appendChild(card);
-  });
-  mainContent.insertBefore(list, masonry);
-}
-
 function setupSearch() {
   const input = document.getElementById('searchInput');
-  if (!input) return;
-  input.addEventListener('input', function() {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
+  let timer = null;
+  
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
       const keyword = input.value.trim().toLowerCase();
-      let oldList = document.querySelector('.search-results-list');
+      
       if (!keyword) {
-        if (oldList) oldList.remove();
         render();
         return;
       }
-      if (oldList) oldList.remove();
-      chrome.storage.local.get({ bookmarks: [] }, function(data) {
-        const results = data.bookmarks.filter(b =>
-          (b.title && b.title.toLowerCase().includes(keyword)) ||
-          (b.url && b.url.toLowerCase().includes(keyword))
-        );
-        renderSearchResults(results);
-      });
+      
+      const results = bookmarks.filter(b =>
+        (b.title && b.title.toLowerCase().includes(keyword)) ||
+        (b.url && b.url.toLowerCase().includes(keyword)) ||
+        (b.tags && b.tags.some(t => t.toLowerCase().includes(keyword))) ||
+        (b.note && b.note.toLowerCase().includes(keyword))
+      );
+      
+      renderSearchResults(results, keyword);
     }, 150);
   });
-} 
+  
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+    
+    if (e.key === 'Escape') {
+      if (document.activeElement === input && input.value) {
+        input.value = '';
+        render();
+      } else {
+        input.focus();
+      }
+    }
+    
+    if (e.key === '/' && document.activeElement !== input) {
+      e.preventDefault();
+      input.focus();
+    }
+  });
+}
+
+function renderSearchResults(results, keyword) {
+  const container = document.getElementById('masonry');
+  const emptyState = document.getElementById('emptyState');
+  
+  emptyState.style.display = 'none';
+  container.innerHTML = '';
+  
+  if (results.length === 0) {
+    container.innerHTML = `
+      <div class="search-results-list">
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">未找到相关书签</div>
+          <div class="empty-desc">尝试其他关键词</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  
+  const list = document.createElement('div');
+  list.className = 'search-results-list';
+  
+  const group = document.createElement('div');
+  group.className = 'group';
+  group.innerHTML = `
+    <div class="group-header">
+      <div class="group-title-wrapper">
+        <div class="group-color" style="background: var(--primary)"></div>
+        <span class="group-title">${i18n('searchResults')}</span>
+        <span class="group-count">${results.length}</span>
+      </div>
+    </div>
+    <div class="bookmark-list"></div>
+  `;
+  
+  const bookmarkList = group.querySelector('.bookmark-list');
+  results.forEach(b => bookmarkList.appendChild(createBookmarkCard(b)));
+  
+  list.appendChild(group);
+  container.appendChild(list);
+}
+
+function setupViewToggle() {
+  document.querySelectorAll('.view-btn').forEach(btn => {
+    if (btn.dataset.view === currentView) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+    
+    btn.onclick = () => {
+      document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentView = btn.dataset.view;
+      chrome.storage.local.set({ viewMode: currentView });
+      render();
+    };
+  });
+}
+
+function setupSort() {
+  const select = document.getElementById('sortSelect');
+  select.value = currentSort;
+  
+  select.onchange = (e) => {
+    currentSort = e.target.value;
+    chrome.storage.local.set({ sortMode: currentSort });
+    render();
+  };
+}
+
+function setupBatchMode() {
+  document.getElementById('batchBtn').onclick = () => {
+    batchMode = !batchMode;
+    document.getElementById('batchBtn').classList.toggle('primary', batchMode);
+    
+    if (!batchMode) {
+      selectedIds.clear();
+    }
+    render();
+  };
+  
+  document.getElementById('batchMove').onclick = openMoveModal;
+  document.getElementById('batchTag').onclick = openTagModal;
+  document.getElementById('batchDelete').onclick = batchDelete;
+  document.getElementById('batchCancel').onclick = () => {
+    batchMode = false;
+    selectedIds.clear();
+    document.getElementById('batchBtn').classList.remove('primary');
+    render();
+  };
+}
+
+function setupModals() {
+  document.getElementById('closeEditModal').onclick = closeEditModal;
+  document.getElementById('cancelEdit').onclick = closeEditModal;
+  document.getElementById('saveEdit').onclick = saveEditModal;
+  
+  document.getElementById('closeMoveModal').onclick = closeMoveModal;
+  document.getElementById('cancelMove').onclick = closeMoveModal;
+  document.getElementById('confirmMove').onclick = confirmMove;
+  
+  document.getElementById('closeTagModal').onclick = closeTagModal;
+  document.getElementById('cancelTag').onclick = closeTagModal;
+  document.getElementById('confirmTag').onclick = confirmBatchTag;
+  
+  setupTagInput('editTagsWrapper', 'editTagInput');
+  setupTagInput('batchTagsWrapper', 'batchTagInput');
+  
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.onclick = (e) => {
+      if (e.target === overlay) {
+        overlay.classList.remove('show');
+      }
+    };
+  });
+}
+
+async function init() {
+  await loadMessages();
+  
+  loadBookmarks(() => {
+    applyI18n();
+    setupLangSelect();
+    render();
+    setupSearch();
+    setupViewToggle();
+    setupSort();
+    setupBatchMode();
+    setupModals();
+    
+    document.getElementById('exportBtn').onclick = exportBookmarks;
+    document.getElementById('importBtn').onclick = importBookmarks;
+    
+    document.body.addEventListener('click', (e) => {
+      const input = document.getElementById('searchInput');
+      if (!input.contains(e.target) && 
+          !e.target.closest('.bookmark-card') && 
+          !e.target.closest('.header-btn') && 
+          !e.target.closest('.view-btn') && 
+          !e.target.closest('.sort-select') &&
+          !e.target.closest('.tag-chip') &&
+          !e.target.closest('.modal') &&
+          !e.target.closest('button') &&
+          !e.target.closest('input') &&
+          !e.target.closest('select')) {
+        input.focus();
+      }
+    }, true);
+  });
+}
+
+function setupLangSelect() {
+  const select = document.getElementById('langSelect');
+  select.value = currentLang;
+  
+  select.onchange = (e) => {
+    currentLang = e.target.value;
+    chrome.storage.local.set({ lang: currentLang });
+    applyI18n();
+    render();
+  };
+}
+
+window.addEventListener('resize', () => {
+  clearTimeout(window.resizeTimer);
+  window.resizeTimer = setTimeout(render, 200);
+});
+
+document.addEventListener('DOMContentLoaded', init);

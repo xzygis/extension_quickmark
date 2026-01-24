@@ -2,20 +2,157 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>我的收藏夹</title>
+  <title>QuickMark</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="header-bar">
-    <div class="search-bar-wrapper">
-      <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <input id="searchInput" class="search-input" type="text" placeholder="搜索网页...">
+    <div class="header-left">
+      <div class="logo">
+        <span class="logo-icon">🔖</span>
+        <span>QuickMark</span>
+      </div>
     </div>
-    <div id="exportImportBar"></div>
+    <div class="header-center">
+      <div class="search-bar-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7"/>
+          <line x1="16.5" y1="16.5" x2="21" y2="21" stroke-linecap="round"/>
+        </svg>
+        <input id="searchInput" class="search-input" type="text" data-i18n-placeholder="searchPlaceholder">
+        <span class="search-shortcut">⌘K</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="view-toggle">
+        <button class="view-btn active" data-view="card" data-i18n-title="viewCard">📇</button>
+        <button class="view-btn" data-view="list" data-i18n-title="viewList">☰</button>
+        <button class="view-btn" data-view="headline" data-i18n-title="viewHeadline">≡</button>
+      </div>
+      <select class="sort-select" id="sortSelect">
+        <option value="recent" data-i18n="sortRecent"></option>
+        <option value="alpha" data-i18n="sortAlpha"></option>
+        <option value="clicks" data-i18n="sortClicks"></option>
+      </select>
+      <button class="header-btn" id="batchBtn">☑ <span data-i18n="batchMode"></span></button>
+      <button class="header-btn" id="exportBtn">↓ <span data-i18n="export"></span></button>
+      <button class="header-btn" id="importBtn">↑ <span data-i18n="import"></span></button>
+      <select class="sort-select" id="langSelect" style="width: auto; min-width: 80px;">
+        <option value="auto">Auto</option>
+        <option value="en">English</option>
+        <option value="zh_CN">中文</option>
+      </select>
+    </div>
   </div>
+
+  <div class="toolbar" id="tagToolbar" style="display: none;">
+    <div class="toolbar-left">
+      <span style="font-size: 13px; color: #888;" data-i18n="tagFilterLabel"></span>
+      <div class="tag-filter" id="tagFilter"></div>
+    </div>
+    <div class="toolbar-right">
+      <button class="header-btn" id="clearTagFilter" style="display: none;" data-i18n="clearFilter"></button>
+    </div>
+  </div>
+
   <div class="main-content">
     <div id="masonry" class="masonry-container"></div>
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <div class="empty-icon">📭</div>
+      <div class="empty-title" data-i18n="emptyTitle"></div>
+      <div class="empty-desc" data-i18n="emptyDesc"></div>
+    </div>
   </div>
+
+  <div class="batch-toolbar" id="batchToolbar">
+    <span class="batch-count"><span id="selectedCount">0</span> <span data-i18n="selected"></span></span>
+    <button class="btn btn-default" id="batchMove" data-i18n="moveToGroup"></button>
+    <button class="btn btn-default" id="batchTag" data-i18n="addTags"></button>
+    <button class="btn btn-danger" id="batchDelete" data-i18n="delete"></button>
+    <button class="btn btn-default" id="batchCancel" data-i18n="cancel"></button>
+  </div>
+
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" data-i18n="editBookmark"></span>
+        <button class="modal-close" id="closeEditModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" data-i18n="title"></label>
+          <input type="text" class="form-input" id="editTitle">
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="url"></label>
+          <input type="text" class="form-input" id="editUrl" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="group"></label>
+          <input type="text" class="form-input" id="editGroup">
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="tags"></label>
+          <div class="tag-input-wrapper" id="editTagsWrapper">
+            <input type="text" class="tag-input" id="editTagInput" data-i18n-placeholder="addTag">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="note"></label>
+          <textarea class="form-input form-textarea" id="editNote" data-i18n-placeholder="addNote"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" id="cancelEdit" data-i18n="cancel"></button>
+        <button class="btn btn-primary" id="saveEdit" data-i18n="save"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="moveModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" data-i18n="moveToGroup"></span>
+        <button class="modal-close" id="closeMoveModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" data-i18n="selectGroup"></label>
+          <select class="form-input" id="moveGroupSelect"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="orCreateNew"></label>
+          <input type="text" class="form-input" id="newGroupInput" data-i18n-placeholder="newGroup">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" id="cancelMove" data-i18n="cancel"></button>
+        <button class="btn btn-primary" id="confirmMove" data-i18n="confirm"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="tagModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" data-i18n="addTags"></span>
+        <button class="modal-close" id="closeTagModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" data-i18n="tags"></label>
+          <div class="tag-input-wrapper" id="batchTagsWrapper">
+            <input type="text" class="tag-input" id="batchTagInput" data-i18n-placeholder="addTag">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-default" id="cancelTag" data-i18n="cancel"></button>
+        <button class="btn btn-primary" id="confirmTag" data-i18n="confirm"></button>
+      </div>
+    </div>
+  </div>
+
   <script src="newtab.js"></script>
 </body>
-</html> 
+</html>

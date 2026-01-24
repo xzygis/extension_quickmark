@@ -1,0 +1,194 @@
+{
+  "extName": {
+    "message": "QuickMark"
+  },
+  "extDescription": {
+    "message": "快速书签管理器"
+  },
+  "emptyTitle": {
+    "message": "还没有收藏"
+  },
+  "emptyDesc": {
+    "message": "点击浏览器工具栏的 QuickMark 图标开始收藏网页"
+  },
+  "selected": {
+    "message": "个已选"
+  },
+  "url": {
+    "message": "网址"
+  },
+  "addNote": {
+    "message": "添加备注..."
+  },
+  "orCreateNew": {
+    "message": "或创建新分组"
+  },
+  "searchPlaceholder": {
+    "message": "搜索书签..."
+  },
+  "tagFilterLabel": {
+    "message": "标签筛选:"
+  },
+  "clearFilter": {
+    "message": "清除"
+  },
+  "sortRecent": {
+    "message": "最近活跃"
+  },
+  "sortAlpha": {
+    "message": "按名称"
+  },
+  "sortClicks": {
+    "message": "最常访问"
+  },
+  "batchMode": {
+    "message": "批量"
+  },
+  "export": {
+    "message": "导出"
+  },
+  "import": {
+    "message": "导入"
+  },
+  "edit": {
+    "message": "编辑"
+  },
+  "delete": {
+    "message": "删除"
+  },
+  "cancel": {
+    "message": "取消"
+  },
+  "save": {
+    "message": "保存"
+  },
+  "confirm": {
+    "message": "确认"
+  },
+  "editBookmark": {
+    "message": "编辑书签"
+  },
+  "title": {
+    "message": "标题"
+  },
+  "group": {
+    "message": "分组"
+  },
+  "tags": {
+    "message": "标签"
+  },
+  "note": {
+    "message": "备注"
+  },
+  "addTag": {
+    "message": "添加标签，按回车确认"
+  },
+  "moveToGroup": {
+    "message": "移动到分组"
+  },
+  "selectGroup": {
+    "message": "选择分组"
+  },
+  "newGroup": {
+    "message": "新分组名称"
+  },
+  "addTags": {
+    "message": "添加标签"
+  },
+  "saved": {
+    "message": "已保存"
+  },
+  "deleted": {
+    "message": "已删除"
+  },
+  "moved": {
+    "message": "已移动"
+  },
+  "tagsAdded": {
+    "message": "已添加标签"
+  },
+  "exportSuccess": {
+    "message": "导出成功"
+  },
+  "importSuccess": {
+    "message": "已导入 {count} 条书签"
+  },
+  "importFailed": {
+    "message": "导入失败"
+  },
+  "confirmDelete": {
+    "message": "确定删除 {count} 条书签？"
+  },
+  "bookmarked": {
+    "message": "已收藏"
+  },
+  "unbookmarked": {
+    "message": "已取消收藏"
+  },
+  "cannotGetPage": {
+    "message": "无法获取页面"
+  },
+  "pageNotSupported": {
+    "message": "不支持此页面"
+  },
+  "processing": {
+    "message": "处理中..."
+  },
+  "ungrouped": {
+    "message": "未分组"
+  },
+  "searchResults": {
+    "message": "搜索结果"
+  },
+  "viewCard": {
+    "message": "卡片视图"
+  },
+  "viewList": {
+    "message": "列表视图"
+  },
+  "viewHeadline": {
+    "message": "标题视图"
+  },
+  "batchDelete": {
+    "message": "删除"
+  },
+  "batchMove": {
+    "message": "移动"
+  },
+  "batchTag": {
+    "message": "标签"
+  },
+  "selectAll": {
+    "message": "全选"
+  },
+  "exitBatch": {
+    "message": "退出"
+  },
+  "language": {
+    "message": "语言"
+  },
+  "pleaseEnterTag": {
+    "message": "请输入标签"
+  },
+  "timeJustNow": {
+    "message": "刚刚"
+  },
+  "timeMinutesAgo": {
+    "message": "{n}分钟前"
+  },
+  "timeHoursAgo": {
+    "message": "{n}小时前"
+  },
+  "timeDaysAgo": {
+    "message": "{n}天前"
+  },
+  "timeWeeksAgo": {
+    "message": "{n}周前"
+  },
+  "timeMonthsAgo": {
+    "message": "{n}个月前"
+  },
+  "timeYearsAgo": {
+    "message": "{n}年前"
+  }
+}
