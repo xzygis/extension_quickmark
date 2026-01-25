@@ -24,16 +24,16 @@
 }
 
 [data-theme="dark"] {
-  --bg: #0f172a;
-  --bg-secondary: #1e293b;
-  --card-bg: #1e293b;
+  --bg: #111827;
+  --bg-secondary: #1f2937;
+  --card-bg: #374151;
   
-  --text: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text: #ffffff;
+  --text-secondary: #e5e7eb;
+  --text-muted: #9ca3af;
   
-  --border: #334155;
-  --border-light: #1e293b;
+  --border: #4b5563;
+  --border-light: #374151;
 }
 
 * {

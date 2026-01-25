@@ -9,6 +9,8 @@ let editingBookmarkId = null;
 let groupOrder = [];
 let draggedGroup = null;
 let currentLang = 'auto';
+let lastGroupOrder = [];
+let skipGroupReorder = false;
 
 const messages = {
   en: {},
@@ -146,14 +148,28 @@ function batchDeleteWithRecord(ids, urls, callback) {
 }
 
 function loadBookmarks(callback) {
-  chrome.storage.local.get({ bookmarks: [], groupOrder: [], viewMode: 'card', sortMode: 'recent', lang: 'auto' }, (data) => {
+  chrome.storage.local.get({ bookmarks: [], groupOrder: [], viewMode: 'card', sortMode: 'recent', lang: 'auto', theme: 'light' }, (data) => {
     bookmarks = data.bookmarks;
     groupOrder = data.groupOrder || [];
     currentView = data.viewMode || 'card';
     currentSort = data.sortMode || 'recent';
     currentLang = data.lang || 'auto';
+    applyTheme(data.theme || 'light');
     if (callback) callback();
   });
+}
+
+function applyTheme(theme) {
+  let effectiveTheme = theme;
+  if (theme === 'auto') {
+    effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  
+  if (effectiveTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
 }
 
 function getLastActiveTime(b) {
@@ -333,9 +349,11 @@ function createBookmarkCard(b) {
   
   card.querySelector('.delete-btn').onclick = (e) => {
     e.stopPropagation();
+    skipGroupReorder = true;
     deleteBookmarkWithRecord(b.id, b.url, () => {
       showTip(i18n('deleted'));
       render();
+      setTimeout(() => { skipGroupReorder = false; }, 3000);
     });
   };
   
@@ -539,7 +557,19 @@ function render() {
     size: groups[name].length
   }));
   
-  groupsWithSize.sort((a, b) => b.size - a.size);
+  if (skipGroupReorder && lastGroupOrder.length > 0) {
+    groupsWithSize.sort((a, b) => {
+      const aIdx = lastGroupOrder.indexOf(a.name);
+      const bIdx = lastGroupOrder.indexOf(b.name);
+      if (aIdx === -1 && bIdx === -1) return b.size - a.size;
+      if (aIdx === -1) return 1;
+      if (bIdx === -1) return -1;
+      return aIdx - bIdx;
+    });
+  } else {
+    groupsWithSize.sort((a, b) => b.size - a.size);
+    lastGroupOrder = groupsWithSize.map(g => g.name);
+  }
   
   groupsWithSize.forEach(({ name, items, size }) => {
     const minIdx = colHeights.indexOf(Math.min(...colHeights));
@@ -611,10 +641,12 @@ function setupGroupDropdown() {
       chip.className = 'group-chip';
       chip.dataset.value = groupName;
       chip.innerHTML = `<span class="group-chip-color" style="background: ${getGroupColor(groupName)}"></span>${groupName} <span class="tag-remove">×</span>`;
-      chip.querySelector('.tag-remove').onclick = () => {
+      chip.querySelector('.tag-remove').onclick = (e) => {
+        e.stopPropagation();
         chip.remove();
         input.style.display = '';
         input.focus();
+        setTimeout(() => showDropdown(false), 0);
       };
       wrapper.insertBefore(chip, input);
       input.value = '';
@@ -1116,10 +1148,12 @@ function setupBatchTagDropdown() {
 
 function batchDelete() {
   const deletedUrls = bookmarks.filter(b => selectedIds.has(b.id)).map(b => b.url);
+  skipGroupReorder = true;
   batchDeleteWithRecord(selectedIds, deletedUrls, () => {
     showTip(i18n('deleted'));
     selectedIds.clear();
     render();
+    setTimeout(() => { skipGroupReorder = false; }, 3000);
   });
 }
 
@@ -1365,6 +1399,20 @@ async function init() {
         input.focus();
       }
     }, true);
+    
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.theme) {
+        applyTheme(changes.theme.newValue);
+      }
+    });
+    
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      chrome.storage.local.get({ theme: 'light' }, (data) => {
+        if (data.theme === 'auto') {
+          applyTheme('auto');
+        }
+      });
+    });
   });
 }
 
