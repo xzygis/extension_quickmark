@@ -1,9 +1,9 @@
 {
   "extName": {
-    "message": "QuickMark"
+    "message": "QuickMark - Bookmark Manager"
   },
   "extDescription": {
-    "message": "快速书签管理器"
+    "message": "新标签页智能书签管理器"
   },
   "emptyTitle": {
     "message": "还没有收藏"
