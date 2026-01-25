@@ -160,16 +160,18 @@ body {
 .header-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  font-size: 12px;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
   font-weight: 500;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--card-bg);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition);
+  position: relative;
 }
 
 .header-btn:hover {
@@ -189,21 +191,52 @@ body {
 }
 
 .header-btn.icon-btn {
-  padding: 6px 8px;
-  font-size: 14px;
+  padding: 10px;
+  width: 40px;
+  height: 40px;
+}
+
+.header-btn.icon-btn svg {
+  flex-shrink: 0;
+}
+
+.header-btn[data-i18n-title]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  background: var(--text);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0;
+  animation: tooltipFadeIn 0.2s ease forwards;
+  animation-delay: 0.3s;
+}
+
+@keyframes tooltipFadeIn {
+  to { opacity: 1; }
 }
 
 .user-menu {
   position: relative;
+  padding: 4px;
 }
 
 .user-avatar {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   cursor: pointer;
   border: 2px solid var(--border);
   transition: all var(--transition);
+  display: block;
 }
 
 .user-avatar:hover {
@@ -212,21 +245,25 @@ body {
 
 .user-dropdown {
   position: absolute;
-  top: calc(100% + 8px);
+  top: 100%;
   right: 0;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
-  min-width: 200px;
+  min-width: 220px;
   z-index: 1000;
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: all 0.2s ease;
   overflow: hidden;
 }
 
-.user-menu:hover .user-dropdown,
-.user-dropdown:hover {
-  display: block;
+.user-menu:hover .user-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
 .user-info {
@@ -256,21 +293,30 @@ body {
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border: none;
   background: transparent;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   cursor: pointer;
   transition: all var(--transition);
   text-align: left;
 }
 
+.dropdown-item svg {
+  flex-shrink: 0;
+}
+
 .dropdown-item:hover {
   background: var(--bg-secondary);
   color: var(--primary);
+}
+
+.dropdown-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .sync-status {
@@ -307,19 +353,20 @@ body {
 .view-toggle {
   display: flex;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-secondary);
 }
 
 .view-btn {
-  padding: 6px 10px;
+  padding: 10px 14px;
   border: none;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition);
-  font-size: 13px;
+  font-size: 15px;
+  position: relative;
 }
 
 .view-btn:not(:last-child) {
@@ -334,6 +381,26 @@ body {
 .view-btn:hover:not(.active) {
   background: var(--card-bg);
   color: var(--text);
+}
+
+.view-btn[data-i18n-title]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  background: var(--text);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0;
+  animation: tooltipFadeIn 0.2s ease forwards;
+  animation-delay: 0.3s;
 }
 
 .toolbar {

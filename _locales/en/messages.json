@@ -328,5 +328,8 @@
   },
   "autoSyncDesc": {
     "message": "Automatically sync bookmarks daily"
+  },
+  "loggingIn": {
+    "message": "Logging in..."
   }
 }

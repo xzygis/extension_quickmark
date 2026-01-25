@@ -54,7 +54,9 @@ function applyI18n() {
   });
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
     const key = el.getAttribute('data-i18n-title');
-    el.title = i18n(key);
+    const text = i18n(key);
+    el.title = text;
+    el.setAttribute('data-tooltip', text);
   });
 }
 
@@ -1366,22 +1368,19 @@ async function setupAuth() {
   const userEmail = document.getElementById('userEmail');
   const logoutBtn = document.getElementById('logoutBtn');
   const manualSyncBtn = document.getElementById('manualSync');
-  const syncBtn = document.getElementById('syncBtn');
   
   const user = await window.FirebaseAuth.init();
   
   function updateUI(user) {
     if (user) {
       loginBtn.style.display = 'none';
-      userMenu.style.display = 'block';
-      syncBtn.style.display = 'block';
+      userMenu.style.display = 'flex';
       userAvatar.src = user.photoURL || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%236366f1"><circle cx="12" cy="8" r="4"/><path d="M12 14c-6 0-8 3-8 6v2h16v-2c0-3-2-6-8-6z"/></svg>';
       userName.textContent = user.displayName || user.email?.split('@')[0];
       userEmail.textContent = user.email;
     } else {
       loginBtn.style.display = 'block';
       userMenu.style.display = 'none';
-      syncBtn.style.display = 'none';
     }
   }
   
@@ -1390,7 +1389,7 @@ async function setupAuth() {
   loginBtn.onclick = async () => {
     try {
       loginBtn.disabled = true;
-      loginBtn.textContent = '...';
+      loginBtn.textContent = i18n('loggingIn');
       const user = await window.FirebaseAuth.signInWithGoogle();
       updateUI(user);
       await checkAndAutoSync();
@@ -1409,7 +1408,6 @@ async function setupAuth() {
   };
   
   manualSyncBtn.onclick = () => performManualSync();
-  syncBtn.onclick = () => performManualSync();
   
   if (user) {
     await checkAndAutoSync();
@@ -1428,14 +1426,12 @@ async function checkAndAutoSync() {
 }
 
 async function performManualSync() {
-  const syncBtn = document.getElementById('syncBtn');
   const manualSyncBtn = document.getElementById('manualSync');
+  const syncIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
   
   try {
-    syncBtn.innerHTML = '<span class="syncing-icon">🔄</span>';
-    syncBtn.disabled = true;
     if (manualSyncBtn) {
-      manualSyncBtn.innerHTML = '<span class="syncing-icon">🔄</span> ' + i18n('syncing');
+      manualSyncBtn.innerHTML = '<span class="syncing-icon">' + syncIcon + '</span> ' + i18n('syncing');
       manualSyncBtn.disabled = true;
     }
     
@@ -1445,32 +1441,26 @@ async function performManualSync() {
       render();
     });
     
-    syncBtn.innerHTML = '✓';
     if (manualSyncBtn) {
-      manualSyncBtn.innerHTML = '✓ ' + i18n('syncSuccess');
+      manualSyncBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> ' + i18n('syncSuccess');
     }
     
     setTimeout(() => {
-      syncBtn.innerHTML = '🔄';
-      syncBtn.disabled = false;
       if (manualSyncBtn) {
-        manualSyncBtn.innerHTML = '🔄 <span data-i18n="syncNow">' + i18n('syncNow') + '</span>';
+        manualSyncBtn.innerHTML = syncIcon + ' <span>' + i18n('syncNow') + '</span>';
         manualSyncBtn.disabled = false;
       }
     }, 2000);
     
   } catch (err) {
     console.error('Sync failed:', err);
-    syncBtn.innerHTML = '❌';
     if (manualSyncBtn) {
-      manualSyncBtn.innerHTML = '❌ ' + i18n('syncFailed');
+      manualSyncBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg> ' + i18n('syncFailed');
     }
     
     setTimeout(() => {
-      syncBtn.innerHTML = '🔄';
-      syncBtn.disabled = false;
       if (manualSyncBtn) {
-        manualSyncBtn.innerHTML = '🔄 <span data-i18n="syncNow">' + i18n('syncNow') + '</span>';
+        manualSyncBtn.innerHTML = syncIcon + ' <span>' + i18n('syncNow') + '</span>';
         manualSyncBtn.disabled = false;
       }
     }, 3000);

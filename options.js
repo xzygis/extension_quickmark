@@ -264,7 +264,7 @@ async function setupSyncSection() {
   syncLoginBtn.onclick = async () => {
     try {
       syncLoginBtn.disabled = true;
-      syncLoginBtn.textContent = '...';
+      syncLoginBtn.textContent = i18n('loggingIn');
       const user = await window.FirebaseAuth.signInWithGoogle();
       updateSyncUI(user);
       showToast(i18n('syncSuccess'), 'success');

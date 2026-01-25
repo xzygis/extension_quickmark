@@ -328,5 +328,8 @@
   },
   "autoSyncDesc": {
     "message": "每天自动同步书签"
+  },
+  "loggingIn": {
+    "message": "登录中..."
   }
 }
