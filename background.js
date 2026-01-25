@@ -46,6 +46,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     shouldAutoSync().then(should => sendResponse({ should })).catch(err => sendResponse({ error: err.message }));
     return true;
   }
+  
+  if (request.action === 'firebase_clearCloud') {
+    clearCloudData().then(() => sendResponse({ success: true })).catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
 });
 
 async function initAuth() {
@@ -208,7 +213,7 @@ async function ensureUserDocument() {
   }
 }
 
-async function syncBookmarksToCloud(bookmarks, groupOrder = []) {
+async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}) {
   if (!currentUser) {
     throw new Error('Not authenticated');
   }
@@ -232,6 +237,15 @@ async function syncBookmarksToCloud(bookmarks, groupOrder = []) {
     }
   }));
   
+  const deletedUrlsData = Object.entries(deletedUrls).map(([url, timestamp]) => ({
+    mapValue: {
+      fields: {
+        url: { stringValue: url },
+        deletedAt: { integerValue: String(timestamp) }
+      }
+    }
+  }));
+  
   const response = await fetch(bookmarksDocUrl, {
     method: 'PATCH',
     headers: {
@@ -242,6 +256,7 @@ async function syncBookmarksToCloud(bookmarks, groupOrder = []) {
       fields: {
         bookmarks: { arrayValue: { values: bookmarksData } },
         groupOrder: { arrayValue: { values: groupOrder.map(g => ({ stringValue: g })) } },
+        deletedUrls: { arrayValue: { values: deletedUrlsData } },
         updatedAt: { timestampValue: new Date().toISOString() },
         deviceId: { stringValue: await getDeviceId() }
       }
@@ -282,7 +297,7 @@ async function fetchBookmarksFromCloud() {
   const data = await response.json();
   
   if (!data.fields) {
-    return { bookmarks: [], groupOrder: [] };
+    return { bookmarks: [], groupOrder: [], deletedUrls: {} };
   }
   
   const bookmarks = (data.fields.bookmarks?.arrayValue?.values || []).map(item => {
@@ -302,17 +317,44 @@ async function fetchBookmarksFromCloud() {
   
   const groupOrder = (data.fields.groupOrder?.arrayValue?.values || []).map(g => g.stringValue);
   
-  return { bookmarks, groupOrder };
+  const deletedUrls = {};
+  (data.fields.deletedUrls?.arrayValue?.values || []).forEach(item => {
+    const fields = item.mapValue.fields;
+    const url = fields.url?.stringValue;
+    const deletedAt = parseInt(fields.deletedAt?.integerValue || '0');
+    if (url) {
+      deletedUrls[url] = deletedAt;
+    }
+  });
+  
+  return { bookmarks, groupOrder, deletedUrls };
 }
 
-async function mergeBookmarks(localBookmarks, cloudBookmarks) {
+async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, cloudDeletedUrls) {
   const merged = new Map();
+  const mergedDeletedUrls = { ...localDeletedUrls, ...cloudDeletedUrls };
+  
+  Object.entries(localDeletedUrls).forEach(([url, localTime]) => {
+    const cloudTime = cloudDeletedUrls[url] || 0;
+    mergedDeletedUrls[url] = Math.max(localTime, cloudTime);
+  });
   
   cloudBookmarks.forEach(b => {
-    merged.set(b.url, b);
+    const deletedAt = mergedDeletedUrls[b.url];
+    const bookmarkTime = Math.max(b.lastClickAt || 0, b.createdAt || 0);
+    if (!deletedAt || bookmarkTime > deletedAt) {
+      merged.set(b.url, b);
+    }
   });
   
   localBookmarks.forEach(b => {
+    const deletedAt = mergedDeletedUrls[b.url];
+    const bookmarkTime = Math.max(b.lastClickAt || 0, b.createdAt || 0);
+    
+    if (deletedAt && bookmarkTime <= deletedAt) {
+      return;
+    }
+    
     const existing = merged.get(b.url);
     if (!existing) {
       merged.set(b.url, b);
@@ -338,7 +380,18 @@ async function mergeBookmarks(localBookmarks, cloudBookmarks) {
     }
   });
   
-  return Array.from(merged.values());
+  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const cleanedDeletedUrls = {};
+  Object.entries(mergedDeletedUrls).forEach(([url, timestamp]) => {
+    if (timestamp > thirtyDaysAgo) {
+      cleanedDeletedUrls[url] = timestamp;
+    }
+  });
+  
+  return { 
+    bookmarks: Array.from(merged.values()),
+    deletedUrls: cleanedDeletedUrls
+  };
 }
 
 async function getDeviceId() {
@@ -373,26 +426,63 @@ async function performSync() {
     throw new Error('Not authenticated');
   }
   
-  const localData = await chrome.storage.local.get(['bookmarks', 'groupOrder']);
+  const localData = await chrome.storage.local.get(['bookmarks', 'groupOrder', 'deletedUrls']);
   const localBookmarks = localData.bookmarks || [];
   const localGroupOrder = localData.groupOrder || [];
+  const localDeletedUrls = localData.deletedUrls || {};
+  
+  console.log('[Sync] Local bookmarks:', localBookmarks.length);
+  console.log('[Sync] Local deletedUrls:', localDeletedUrls);
   
   const cloudData = await fetchBookmarksFromCloud();
   
-  const mergedBookmarks = await mergeBookmarks(localBookmarks, cloudData.bookmarks);
+  console.log('[Sync] Cloud bookmarks:', cloudData.bookmarks.length);
+  console.log('[Sync] Cloud deletedUrls:', cloudData.deletedUrls);
+  
+  const mergeResult = await mergeBookmarks(
+    localBookmarks, 
+    cloudData.bookmarks, 
+    localDeletedUrls, 
+    cloudData.deletedUrls || {}
+  );
+  
+  console.log('[Sync] Merged bookmarks:', mergeResult.bookmarks.length);
+  console.log('[Sync] Merged deletedUrls:', mergeResult.deletedUrls);
   
   const mergedGroupOrder = localGroupOrder.length > 0 ? localGroupOrder : cloudData.groupOrder;
   
   await chrome.storage.local.set({
-    bookmarks: mergedBookmarks,
-    groupOrder: mergedGroupOrder
+    bookmarks: mergeResult.bookmarks,
+    groupOrder: mergedGroupOrder,
+    deletedUrls: mergeResult.deletedUrls
   });
   
-  await syncBookmarksToCloud(mergedBookmarks, mergedGroupOrder);
+  await syncBookmarksToCloud(mergeResult.bookmarks, mergedGroupOrder, mergeResult.deletedUrls);
   
   return {
     localCount: localBookmarks.length,
     cloudCount: cloudData.bookmarks.length,
-    mergedCount: mergedBookmarks.length
+    mergedCount: mergeResult.bookmarks.length
   };
+}
+
+async function clearCloudData() {
+  if (!currentUser) {
+    throw new Error('Not authenticated');
+  }
+  
+  const token = await getValidToken();
+  const bookmarksDocUrl = `${FIRESTORE_BASE_URL}/users/${currentUser.uid}/quickmark/bookmarks`;
+  
+  const response = await fetch(bookmarksDocUrl, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  if (!response.ok && response.status !== 404) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Clear cloud data failed');
+  }
+  
+  return true;
 }

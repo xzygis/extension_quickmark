@@ -269,20 +269,35 @@
   "importDataDesc": {
     "message": "从 JSON 文件导入书签"
   },
-  "clearData": {
+  "clearLocalData": {
+    "message": "清除本地数据"
+  },
+  "clearLocalDataDesc": {
+    "message": "仅清除本地书签，下次同步时会从云端恢复"
+  },
+  "clearLocal": {
+    "message": "清除本地"
+  },
+  "confirmClearLocal": {
+    "message": "确定清除本地书签吗？下次同步时会从云端恢复。"
+  },
+  "clearAllData": {
     "message": "清除所有数据"
   },
-  "clearDataDesc": {
-    "message": "删除所有书签和设置，此操作不可撤销"
+  "clearAllDataDesc": {
+    "message": "删除本地和云端的所有书签，此操作不可撤销"
   },
   "clearAll": {
     "message": "清除全部"
   },
   "confirmClearAll": {
-    "message": "确定要删除所有数据吗？此操作不可撤销。"
+    "message": "确定删除所有数据（包括云端）吗？此操作不可撤销。"
   },
   "dataCleared": {
     "message": "所有数据已清除"
+  },
+  "clearFailed": {
+    "message": "清除失败"
   },
   "about": {
     "message": "关于"

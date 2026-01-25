@@ -165,12 +165,31 @@ function handleImport(e) {
   e.target.value = '';
 }
 
-function clearAllData() {
+async function clearAllData() {
   if (confirm(i18n('confirmClearAll'))) {
-    chrome.storage.local.clear(() => {
-      showToast(i18n('dataCleared'), 'success');
-      setTimeout(() => location.reload(), 1000);
-    });
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'firebase_clearCloud' });
+      if (response.error) {
+        showToast(i18n('clearFailed') + ': ' + response.error, 'error');
+        return;
+      }
+      
+      chrome.storage.local.remove([
+        'bookmarks',
+        'groupOrder',
+        'deletedUrls',
+        'viewMode',
+        'sortMode',
+        'theme',
+        'language',
+        'lastSyncTime'
+      ], () => {
+        showToast(i18n('dataCleared'), 'success');
+        setTimeout(() => location.reload(), 1000);
+      });
+    } catch (err) {
+      showToast(i18n('clearFailed') + ': ' + err.message, 'error');
+    }
   }
 }
 
@@ -205,7 +224,7 @@ async function init() {
   document.getElementById('exportBtn').addEventListener('click', exportBookmarks);
   document.getElementById('importBtn').addEventListener('click', importBookmarks);
   document.getElementById('importFile').addEventListener('change', handleImport);
-  document.getElementById('clearBtn').addEventListener('click', clearAllData);
+  document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
   
   setupSyncSection();
   

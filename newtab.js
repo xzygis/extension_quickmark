@@ -125,6 +125,26 @@ function saveBookmarks(callback) {
   chrome.storage.local.set({ bookmarks, groupOrder }, callback);
 }
 
+function deleteBookmarkWithRecord(bookmarkId, url, callback) {
+  bookmarks = bookmarks.filter(x => x.id !== bookmarkId);
+  chrome.storage.local.get({ deletedUrls: {} }, (data) => {
+    const deletedUrls = data.deletedUrls;
+    deletedUrls[url] = Date.now();
+    chrome.storage.local.set({ bookmarks, groupOrder, deletedUrls }, callback);
+  });
+}
+
+function batchDeleteWithRecord(ids, urls, callback) {
+  bookmarks = bookmarks.filter(b => !ids.has(b.id));
+  chrome.storage.local.get({ deletedUrls: {} }, (data) => {
+    const deletedUrls = data.deletedUrls;
+    urls.forEach(url => {
+      deletedUrls[url] = Date.now();
+    });
+    chrome.storage.local.set({ bookmarks, groupOrder, deletedUrls }, callback);
+  });
+}
+
 function loadBookmarks(callback) {
   chrome.storage.local.get({ bookmarks: [], groupOrder: [], viewMode: 'card', sortMode: 'recent', lang: 'auto' }, (data) => {
     bookmarks = data.bookmarks;
@@ -313,8 +333,7 @@ function createBookmarkCard(b) {
   
   card.querySelector('.delete-btn').onclick = (e) => {
     e.stopPropagation();
-    bookmarks = bookmarks.filter(x => x.id !== b.id);
-    saveBookmarks(() => {
+    deleteBookmarkWithRecord(b.id, b.url, () => {
       showTip(i18n('deleted'));
       render();
     });
@@ -1096,8 +1115,8 @@ function setupBatchTagDropdown() {
 }
 
 function batchDelete() {
-  bookmarks = bookmarks.filter(b => !selectedIds.has(b.id));
-  saveBookmarks(() => {
+  const deletedUrls = bookmarks.filter(b => selectedIds.has(b.id)).map(b => b.url);
+  batchDeleteWithRecord(selectedIds, deletedUrls, () => {
     showTip(i18n('deleted'));
     selectedIds.clear();
     render();

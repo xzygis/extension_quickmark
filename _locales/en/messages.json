@@ -269,20 +269,35 @@
   "importDataDesc": {
     "message": "Import bookmarks from a JSON file"
   },
-  "clearData": {
+  "clearLocalData": {
+    "message": "Clear Local Data"
+  },
+  "clearLocalDataDesc": {
+    "message": "Clear local bookmarks only. Cloud data will be restored on next sync."
+  },
+  "clearLocal": {
+    "message": "Clear Local"
+  },
+  "confirmClearLocal": {
+    "message": "Clear local bookmarks? Cloud data will be restored on next sync."
+  },
+  "clearAllData": {
     "message": "Clear All Data"
   },
-  "clearDataDesc": {
-    "message": "Delete all bookmarks and settings. This cannot be undone."
+  "clearAllDataDesc": {
+    "message": "Delete all bookmarks from local and cloud. This cannot be undone."
   },
   "clearAll": {
     "message": "Clear All"
   },
   "confirmClearAll": {
-    "message": "Are you sure you want to delete all data? This cannot be undone."
+    "message": "Delete all data including cloud? This cannot be undone."
   },
   "dataCleared": {
     "message": "All data has been cleared"
+  },
+  "clearFailed": {
+    "message": "Clear failed"
   },
   "about": {
     "message": "About"
