@@ -292,5 +292,41 @@
   },
   "settingsSaved": {
     "message": "设置会自动保存"
+  },
+  "login": {
+    "message": "登录"
+  },
+  "logout": {
+    "message": "退出登录"
+  },
+  "loginFailed": {
+    "message": "登录失败"
+  },
+  "syncNow": {
+    "message": "立即同步"
+  },
+  "syncing": {
+    "message": "同步中..."
+  },
+  "syncSuccess": {
+    "message": "同步完成"
+  },
+  "syncFailed": {
+    "message": "同步失败"
+  },
+  "lastSync": {
+    "message": "上次同步"
+  },
+  "cloudSync": {
+    "message": "云端同步"
+  },
+  "cloudSyncDesc": {
+    "message": "使用 Google 账号在多设备间同步书签"
+  },
+  "autoSync": {
+    "message": "自动同步"
+  },
+  "autoSyncDesc": {
+    "message": "每天自动同步书签"
   }
 }

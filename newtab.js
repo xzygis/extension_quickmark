@@ -1321,6 +1321,7 @@ async function init() {
   loadBookmarks(() => {
     applyI18n();
     setupSettingsBtn();
+    setupAuth();
     render();
     setupSearch();
     setupViewToggle();
@@ -1354,6 +1355,125 @@ function setupSettingsBtn() {
       e.stopPropagation();
       window.location.href = 'options.html';
     };
+  }
+}
+
+async function setupAuth() {
+  const loginBtn = document.getElementById('loginBtn');
+  const userMenu = document.getElementById('userMenu');
+  const userAvatar = document.getElementById('userAvatar');
+  const userName = document.getElementById('userName');
+  const userEmail = document.getElementById('userEmail');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const manualSyncBtn = document.getElementById('manualSync');
+  const syncBtn = document.getElementById('syncBtn');
+  
+  const user = await window.FirebaseAuth.init();
+  
+  function updateUI(user) {
+    if (user) {
+      loginBtn.style.display = 'none';
+      userMenu.style.display = 'block';
+      syncBtn.style.display = 'block';
+      userAvatar.src = user.photoURL || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%236366f1"><circle cx="12" cy="8" r="4"/><path d="M12 14c-6 0-8 3-8 6v2h16v-2c0-3-2-6-8-6z"/></svg>';
+      userName.textContent = user.displayName || user.email?.split('@')[0];
+      userEmail.textContent = user.email;
+    } else {
+      loginBtn.style.display = 'block';
+      userMenu.style.display = 'none';
+      syncBtn.style.display = 'none';
+    }
+  }
+  
+  updateUI(user);
+  
+  loginBtn.onclick = async () => {
+    try {
+      loginBtn.disabled = true;
+      loginBtn.textContent = '...';
+      const user = await window.FirebaseAuth.signInWithGoogle();
+      updateUI(user);
+      await checkAndAutoSync();
+    } catch (err) {
+      console.error('Login failed:', err);
+      alert(i18n('loginFailed') + ': ' + err.message);
+    } finally {
+      loginBtn.disabled = false;
+      loginBtn.textContent = i18n('login');
+    }
+  };
+  
+  logoutBtn.onclick = async () => {
+    await window.FirebaseAuth.signOut();
+    updateUI(null);
+  };
+  
+  manualSyncBtn.onclick = () => performManualSync();
+  syncBtn.onclick = () => performManualSync();
+  
+  if (user) {
+    await checkAndAutoSync();
+  }
+}
+
+async function checkAndAutoSync() {
+  try {
+    const shouldSync = await window.FirebaseAuth.shouldAutoSync();
+    if (shouldSync) {
+      await performManualSync();
+    }
+  } catch (err) {
+    console.error('Auto sync check failed:', err);
+  }
+}
+
+async function performManualSync() {
+  const syncBtn = document.getElementById('syncBtn');
+  const manualSyncBtn = document.getElementById('manualSync');
+  
+  try {
+    syncBtn.innerHTML = '<span class="syncing-icon">🔄</span>';
+    syncBtn.disabled = true;
+    if (manualSyncBtn) {
+      manualSyncBtn.innerHTML = '<span class="syncing-icon">🔄</span> ' + i18n('syncing');
+      manualSyncBtn.disabled = true;
+    }
+    
+    const result = await window.FirebaseAuth.performSync();
+    
+    loadBookmarks(() => {
+      render();
+    });
+    
+    syncBtn.innerHTML = '✓';
+    if (manualSyncBtn) {
+      manualSyncBtn.innerHTML = '✓ ' + i18n('syncSuccess');
+    }
+    
+    setTimeout(() => {
+      syncBtn.innerHTML = '🔄';
+      syncBtn.disabled = false;
+      if (manualSyncBtn) {
+        manualSyncBtn.innerHTML = '🔄 <span data-i18n="syncNow">' + i18n('syncNow') + '</span>';
+        manualSyncBtn.disabled = false;
+      }
+    }, 2000);
+    
+  } catch (err) {
+    console.error('Sync failed:', err);
+    syncBtn.innerHTML = '❌';
+    if (manualSyncBtn) {
+      manualSyncBtn.innerHTML = '❌ ' + i18n('syncFailed');
+    }
+    
+    setTimeout(() => {
+      syncBtn.innerHTML = '🔄';
+      syncBtn.disabled = false;
+      if (manualSyncBtn) {
+        manualSyncBtn.innerHTML = '🔄 <span data-i18n="syncNow">' + i18n('syncNow') + '</span>';
+        manualSyncBtn.disabled = false;
+      }
+    }, 3000);
   }
 }
 

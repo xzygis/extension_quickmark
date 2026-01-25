@@ -193,6 +193,117 @@ body {
   font-size: 14px;
 }
 
+.user-menu {
+  position: relative;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  transition: all var(--transition);
+}
+
+.user-avatar:hover {
+  border-color: var(--primary);
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  min-width: 200px;
+  z-index: 1000;
+  display: none;
+  overflow: hidden;
+}
+
+.user-menu:hover .user-dropdown,
+.user-dropdown:hover {
+  display: block;
+}
+
+.user-info {
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+}
+
+.user-name {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.user-email {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-secondary);
+  color: var(--primary);
+}
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+}
+
+.sync-status.syncing {
+  color: var(--primary);
+}
+
+.sync-status.success {
+  color: var(--success);
+}
+
+.sync-status.error {
+  color: var(--danger);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.syncing-icon {
+  animation: spin 1s linear infinite;
+}
+
 .view-toggle {
   display: flex;
   border: 1px solid var(--border);

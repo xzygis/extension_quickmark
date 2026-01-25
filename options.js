@@ -207,11 +207,103 @@ async function init() {
   document.getElementById('importFile').addEventListener('change', handleImport);
   document.getElementById('clearBtn').addEventListener('click', clearAllData);
   
+  setupSyncSection();
+  
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (currentTheme === 'auto') {
       applyTheme('auto');
     }
   });
+}
+
+async function setupSyncSection() {
+  const syncLoginBtn = document.getElementById('syncLoginBtn');
+  const syncLogoutBtn = document.getElementById('syncLogoutBtn');
+  const autoSyncSection = document.getElementById('autoSyncSection');
+  const manualSyncSection = document.getElementById('manualSyncSection');
+  const autoSyncToggle = document.getElementById('autoSyncToggle');
+  const manualSyncBtn = document.getElementById('manualSyncBtn');
+  const syncAccountLabel = document.getElementById('syncAccountLabel');
+  const lastSyncTime = document.getElementById('lastSyncTime');
+  
+  const user = await window.FirebaseAuth.init();
+  
+  function updateSyncUI(user) {
+    if (user) {
+      syncLoginBtn.style.display = 'none';
+      syncLogoutBtn.style.display = 'block';
+      autoSyncSection.style.display = 'flex';
+      manualSyncSection.style.display = 'flex';
+      syncAccountLabel.textContent = user.email;
+      updateLastSyncTime();
+    } else {
+      syncLoginBtn.style.display = 'block';
+      syncLogoutBtn.style.display = 'none';
+      autoSyncSection.style.display = 'none';
+      manualSyncSection.style.display = 'none';
+      syncAccountLabel.textContent = 'Google Account';
+    }
+  }
+  
+  async function updateLastSyncTime() {
+    const stored = await chrome.storage.local.get(['lastSyncTime']);
+    if (stored.lastSyncTime) {
+      const date = new Date(stored.lastSyncTime);
+      lastSyncTime.textContent = i18n('lastSync') + ': ' + date.toLocaleString();
+    } else {
+      lastSyncTime.textContent = i18n('lastSync') + ': -';
+    }
+  }
+  
+  updateSyncUI(user);
+  
+  chrome.storage.local.get({ autoSyncEnabled: true }, (data) => {
+    autoSyncToggle.checked = data.autoSyncEnabled;
+  });
+  
+  syncLoginBtn.onclick = async () => {
+    try {
+      syncLoginBtn.disabled = true;
+      syncLoginBtn.textContent = '...';
+      const user = await window.FirebaseAuth.signInWithGoogle();
+      updateSyncUI(user);
+      showToast(i18n('syncSuccess'), 'success');
+    } catch (err) {
+      console.error('Login failed:', err);
+      showToast(i18n('loginFailed') + ': ' + err.message, 'error');
+    } finally {
+      syncLoginBtn.disabled = false;
+      syncLoginBtn.textContent = i18n('login');
+    }
+  };
+  
+  syncLogoutBtn.onclick = async () => {
+    await window.FirebaseAuth.signOut();
+    updateSyncUI(null);
+    showToast(i18n('logout'), 'success');
+  };
+  
+  autoSyncToggle.onchange = () => {
+    chrome.storage.local.set({ autoSyncEnabled: autoSyncToggle.checked });
+  };
+  
+  manualSyncBtn.onclick = async () => {
+    try {
+      manualSyncBtn.disabled = true;
+      manualSyncBtn.textContent = i18n('syncing');
+      
+      await window.FirebaseAuth.performSync();
+      
+      updateLastSyncTime();
+      showToast(i18n('syncSuccess'), 'success');
+    } catch (err) {
+      console.error('Sync failed:', err);
+      showToast(i18n('syncFailed') + ': ' + err.message, 'error');
+    } finally {
+      manualSyncBtn.disabled = false;
+      manualSyncBtn.textContent = i18n('syncNow');
+    }
+  };
 }
 
 document.addEventListener('DOMContentLoaded', init);

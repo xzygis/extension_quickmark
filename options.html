@@ -90,6 +90,44 @@
       </section>
 
       <section class="options-section">
+        <h2 class="section-title" data-i18n="cloudSync"></h2>
+        
+        <div class="option-item" id="syncAccountSection">
+          <div class="option-info">
+            <label class="option-label" id="syncAccountLabel">Google Account</label>
+            <p class="option-desc" id="syncAccountDesc" data-i18n="cloudSyncDesc"></p>
+          </div>
+          <div class="option-control">
+            <button class="btn btn-primary" id="syncLoginBtn" data-i18n="login"></button>
+            <button class="btn btn-default" id="syncLogoutBtn" style="display: none;" data-i18n="logout"></button>
+          </div>
+        </div>
+
+        <div class="option-item" id="autoSyncSection" style="display: none;">
+          <div class="option-info">
+            <label class="option-label" data-i18n="autoSync"></label>
+            <p class="option-desc" data-i18n="autoSyncDesc"></p>
+          </div>
+          <div class="option-control">
+            <label class="toggle">
+              <input type="checkbox" id="autoSyncToggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="option-item" id="manualSyncSection" style="display: none;">
+          <div class="option-info">
+            <label class="option-label" data-i18n="syncNow"></label>
+            <p class="option-desc" id="lastSyncTime"></p>
+          </div>
+          <div class="option-control">
+            <button class="btn btn-default" id="manualSyncBtn" data-i18n="syncNow"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="options-section">
         <h2 class="section-title" data-i18n="dataManagement"></h2>
         
         <div class="option-item">
@@ -133,7 +171,7 @@
             <p class="option-desc" data-i18n="version"></p>
           </div>
           <div class="option-control">
-            <span class="version-text">v1.3.0</span>
+            <span class="version-text">v1.4.0</span>
           </div>
         </div>
       </section>
@@ -146,6 +184,7 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="firebase.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

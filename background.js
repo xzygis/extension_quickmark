@@ -1,4 +1,398 @@
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCPJVkFAE9QVXyit0Bm5SEUFdCoGtA5kVA",
+  authDomain: "qubittool.firebaseapp.com",
+  projectId: "qubittool",
+  storageBucket: "qubittool.firebasestorage.app",
+  messagingSenderId: "169990336049",
+  appId: "1:169990336049:web:7a0812b54db215caa5af10"
+};
+
+const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents`;
+
+let currentUser = null;
+let idToken = null;
+
 chrome.runtime.onInstalled.addListener(() => {
-  // 初始化存储
   chrome.storage.local.get({ bookmarks: [] }, () => {});
-}); 
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'firebase_init') {
+    initAuth().then(user => sendResponse({ user })).catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+  
+  if (request.action === 'firebase_signIn') {
+    signInWithGoogle().then(user => sendResponse({ user })).catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+  
+  if (request.action === 'firebase_signOut') {
+    signOut().then(() => sendResponse({ success: true })).catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+  
+  if (request.action === 'firebase_getCurrentUser') {
+    sendResponse({ user: currentUser });
+    return false;
+  }
+  
+  if (request.action === 'firebase_performSync') {
+    performSync().then(result => sendResponse({ result })).catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+  
+  if (request.action === 'firebase_shouldAutoSync') {
+    shouldAutoSync().then(should => sendResponse({ should })).catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+});
+
+async function initAuth() {
+  const stored = await chrome.storage.local.get(['firebaseUser', 'firebaseToken', 'tokenExpiry']);
+  if (stored.firebaseUser && stored.firebaseToken && stored.tokenExpiry > Date.now()) {
+    currentUser = stored.firebaseUser;
+    idToken = stored.firebaseToken;
+    return currentUser;
+  }
+  return null;
+}
+
+async function signInWithGoogle() {
+  return new Promise((resolve, reject) => {
+    chrome.identity.getAuthToken({ interactive: true }, async (token) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      
+      if (!token) {
+        reject(new Error('No token received'));
+        return;
+      }
+      
+      try {
+        const credential = await exchangeGoogleToken(token);
+        resolve(credential);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+async function exchangeGoogleToken(googleAccessToken) {
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_CONFIG.apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        postBody: `access_token=${googleAccessToken}&providerId=google.com`,
+        requestUri: `https://${chrome.runtime.id}.chromiumapp.org/`,
+        returnIdpCredential: true,
+        returnSecureToken: true
+      })
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Authentication failed');
+  }
+  
+  const data = await response.json();
+  
+  currentUser = {
+    uid: data.localId,
+    email: data.email,
+    displayName: data.displayName || data.email?.split('@')[0],
+    photoURL: data.photoUrl
+  };
+  idToken = data.idToken;
+  
+  const tokenExpiry = Date.now() + (parseInt(data.expiresIn) * 1000) - 60000;
+  
+  await chrome.storage.local.set({
+    firebaseUser: currentUser,
+    firebaseToken: idToken,
+    firebaseRefreshToken: data.refreshToken,
+    tokenExpiry: tokenExpiry
+  });
+  
+  await ensureUserDocument();
+  
+  return currentUser;
+}
+
+async function refreshToken() {
+  const stored = await chrome.storage.local.get(['firebaseRefreshToken']);
+  if (!stored.firebaseRefreshToken) {
+    throw new Error('No refresh token available');
+  }
+  
+  const response = await fetch(
+    `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_CONFIG.apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=refresh_token&refresh_token=${stored.firebaseRefreshToken}`
+    }
+  );
+  
+  if (!response.ok) {
+    await signOut();
+    throw new Error('Token refresh failed');
+  }
+  
+  const data = await response.json();
+  idToken = data.id_token;
+  
+  const tokenExpiry = Date.now() + (parseInt(data.expires_in) * 1000) - 60000;
+  
+  await chrome.storage.local.set({
+    firebaseToken: idToken,
+    firebaseRefreshToken: data.refresh_token,
+    tokenExpiry: tokenExpiry
+  });
+  
+  return idToken;
+}
+
+async function getValidToken() {
+  const stored = await chrome.storage.local.get(['tokenExpiry']);
+  if (!idToken || !stored.tokenExpiry || stored.tokenExpiry < Date.now()) {
+    return await refreshToken();
+  }
+  return idToken;
+}
+
+async function signOut() {
+  currentUser = null;
+  idToken = null;
+  await chrome.storage.local.remove([
+    'firebaseUser', 
+    'firebaseToken', 
+    'firebaseRefreshToken', 
+    'tokenExpiry',
+    'lastSyncTime'
+  ]);
+}
+
+async function ensureUserDocument() {
+  if (!currentUser) return;
+  
+  const token = await getValidToken();
+  const userDocUrl = `${FIRESTORE_BASE_URL}/users/${currentUser.uid}`;
+  
+  const getResponse = await fetch(userDocUrl, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  if (getResponse.status === 404) {
+    await fetch(userDocUrl, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fields: {
+          email: { stringValue: currentUser.email },
+          displayName: { stringValue: currentUser.displayName || '' },
+          photoURL: { stringValue: currentUser.photoURL || '' },
+          createdAt: { stringValue: new Date().toISOString() }
+        }
+      })
+    });
+  }
+}
+
+async function syncBookmarksToCloud(bookmarks, groupOrder = []) {
+  if (!currentUser) {
+    throw new Error('Not authenticated');
+  }
+  
+  const token = await getValidToken();
+  const bookmarksDocUrl = `${FIRESTORE_BASE_URL}/users/${currentUser.uid}/quickmark/bookmarks`;
+  
+  const bookmarksData = bookmarks.map(b => ({
+    mapValue: {
+      fields: {
+        id: { stringValue: b.id },
+        url: { stringValue: b.url },
+        title: { stringValue: b.title || '' },
+        favicon: { stringValue: b.favicon || '' },
+        group: { stringValue: b.group || '' },
+        tags: { arrayValue: { values: (b.tags || []).map(t => ({ stringValue: t })) } },
+        createdAt: { integerValue: String(b.createdAt || Date.now()) },
+        clickCount: { integerValue: String(b.clickCount || 0) },
+        lastClickAt: { integerValue: String(b.lastClickAt || 0) }
+      }
+    }
+  }));
+  
+  const response = await fetch(bookmarksDocUrl, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      fields: {
+        bookmarks: { arrayValue: { values: bookmarksData } },
+        groupOrder: { arrayValue: { values: groupOrder.map(g => ({ stringValue: g })) } },
+        updatedAt: { timestampValue: new Date().toISOString() },
+        deviceId: { stringValue: await getDeviceId() }
+      }
+    })
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Sync failed');
+  }
+  
+  await chrome.storage.local.set({ lastSyncTime: Date.now() });
+  
+  return true;
+}
+
+async function fetchBookmarksFromCloud() {
+  if (!currentUser) {
+    throw new Error('Not authenticated');
+  }
+  
+  const token = await getValidToken();
+  const bookmarksDocUrl = `${FIRESTORE_BASE_URL}/users/${currentUser.uid}/quickmark/bookmarks`;
+  
+  const response = await fetch(bookmarksDocUrl, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  if (response.status === 404) {
+    return { bookmarks: [], groupOrder: [] };
+  }
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Fetch failed');
+  }
+  
+  const data = await response.json();
+  
+  if (!data.fields) {
+    return { bookmarks: [], groupOrder: [] };
+  }
+  
+  const bookmarks = (data.fields.bookmarks?.arrayValue?.values || []).map(item => {
+    const fields = item.mapValue.fields;
+    return {
+      id: fields.id?.stringValue || '',
+      url: fields.url?.stringValue || '',
+      title: fields.title?.stringValue || '',
+      favicon: fields.favicon?.stringValue || '',
+      group: fields.group?.stringValue || '',
+      tags: (fields.tags?.arrayValue?.values || []).map(t => t.stringValue),
+      createdAt: parseInt(fields.createdAt?.integerValue || '0'),
+      clickCount: parseInt(fields.clickCount?.integerValue || '0'),
+      lastClickAt: parseInt(fields.lastClickAt?.integerValue || '0')
+    };
+  });
+  
+  const groupOrder = (data.fields.groupOrder?.arrayValue?.values || []).map(g => g.stringValue);
+  
+  return { bookmarks, groupOrder };
+}
+
+async function mergeBookmarks(localBookmarks, cloudBookmarks) {
+  const merged = new Map();
+  
+  cloudBookmarks.forEach(b => {
+    merged.set(b.url, b);
+  });
+  
+  localBookmarks.forEach(b => {
+    const existing = merged.get(b.url);
+    if (!existing) {
+      merged.set(b.url, b);
+    } else {
+      const localTime = b.createdAt || 0;
+      const cloudTime = existing.createdAt || 0;
+      const localClick = b.lastClickAt || 0;
+      const cloudClick = existing.lastClickAt || 0;
+      
+      if (localClick > cloudClick || (localClick === cloudClick && localTime > cloudTime)) {
+        merged.set(b.url, {
+          ...existing,
+          ...b,
+          clickCount: Math.max(b.clickCount || 0, existing.clickCount || 0)
+        });
+      } else {
+        merged.set(b.url, {
+          ...b,
+          ...existing,
+          clickCount: Math.max(b.clickCount || 0, existing.clickCount || 0)
+        });
+      }
+    }
+  });
+  
+  return Array.from(merged.values());
+}
+
+async function getDeviceId() {
+  const stored = await chrome.storage.local.get(['deviceId']);
+  if (stored.deviceId) {
+    return stored.deviceId;
+  }
+  const deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  await chrome.storage.local.set({ deviceId });
+  return deviceId;
+}
+
+async function shouldAutoSync() {
+  const stored = await chrome.storage.local.get(['lastSyncTime', 'autoSyncEnabled']);
+  
+  if (stored.autoSyncEnabled === false) {
+    return false;
+  }
+  
+  if (!currentUser) {
+    return false;
+  }
+  
+  const lastSync = stored.lastSyncTime || 0;
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  
+  return Date.now() - lastSync > oneDayMs;
+}
+
+async function performSync() {
+  if (!currentUser) {
+    throw new Error('Not authenticated');
+  }
+  
+  const localData = await chrome.storage.local.get(['bookmarks', 'groupOrder']);
+  const localBookmarks = localData.bookmarks || [];
+  const localGroupOrder = localData.groupOrder || [];
+  
+  const cloudData = await fetchBookmarksFromCloud();
+  
+  const mergedBookmarks = await mergeBookmarks(localBookmarks, cloudData.bookmarks);
+  
+  const mergedGroupOrder = localGroupOrder.length > 0 ? localGroupOrder : cloudData.groupOrder;
+  
+  await chrome.storage.local.set({
+    bookmarks: mergedBookmarks,
+    groupOrder: mergedGroupOrder
+  });
+  
+  await syncBookmarksToCloud(mergedBookmarks, mergedGroupOrder);
+  
+  return {
+    localCount: localBookmarks.length,
+    cloudCount: cloudData.bookmarks.length,
+    mergedCount: mergedBookmarks.length
+  };
+}

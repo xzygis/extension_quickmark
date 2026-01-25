@@ -30,6 +30,20 @@
         <button class="view-btn" data-view="headline" data-i18n-title="viewHeadline">≡</button>
       </div>
       <button class="header-btn icon-btn" id="batchBtn" data-i18n-title="batchMode">☑</button>
+      <button class="header-btn icon-btn" id="syncBtn" data-i18n-title="syncNow" style="display: none;">🔄</button>
+      <div class="user-menu" id="userMenu" style="display: none;">
+        <img class="user-avatar" id="userAvatar" src="" alt="">
+        <div class="user-dropdown" id="userDropdown">
+          <div class="user-info">
+            <span class="user-name" id="userName"></span>
+            <span class="user-email" id="userEmail"></span>
+          </div>
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item" id="manualSync">🔄 <span data-i18n="syncNow"></span></button>
+          <button class="dropdown-item" id="logoutBtn">🚪 <span data-i18n="logout"></span></button>
+        </div>
+      </div>
+      <button class="header-btn" id="loginBtn" data-i18n="login"></button>
       <button class="header-btn icon-btn" id="settingsBtn" data-i18n-title="settings">⚙</button>
     </div>
   </div>
@@ -146,6 +160,7 @@
     </div>
   </div>
 
+  <script src="firebase.js"></script>
   <script src="newtab.js"></script>
 </body>
 </html>

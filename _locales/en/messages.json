@@ -292,5 +292,41 @@
   },
   "settingsSaved": {
     "message": "Settings are saved automatically"
+  },
+  "login": {
+    "message": "Login"
+  },
+  "logout": {
+    "message": "Logout"
+  },
+  "loginFailed": {
+    "message": "Login failed"
+  },
+  "syncNow": {
+    "message": "Sync Now"
+  },
+  "syncing": {
+    "message": "Syncing..."
+  },
+  "syncSuccess": {
+    "message": "Sync completed"
+  },
+  "syncFailed": {
+    "message": "Sync failed"
+  },
+  "lastSync": {
+    "message": "Last sync"
+  },
+  "cloudSync": {
+    "message": "Cloud Sync"
+  },
+  "cloudSyncDesc": {
+    "message": "Sync bookmarks across devices with your Google account"
+  },
+  "autoSync": {
+    "message": "Auto Sync"
+  },
+  "autoSyncDesc": {
+    "message": "Automatically sync bookmarks daily"
   }
 }
