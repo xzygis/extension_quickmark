@@ -110,6 +110,64 @@ body {
   border-bottom: 1px solid var(--border-light);
 }
 
+.tips-section .section-title {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.08));
+  color: var(--primary);
+}
+
+.tips-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px;
+}
+
+.tip-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  transition: all 0.2s ease;
+}
+
+.tip-card:hover {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.tip-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-bg);
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tip-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.tip-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 4px 0;
+}
+
+.tip-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
 .option-item {
   display: flex;
   align-items: center;
@@ -369,4 +427,5 @@ body {
   .theme-option {
     flex: 1;
   }
+  
 }

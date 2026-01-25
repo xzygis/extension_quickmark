@@ -346,5 +346,26 @@
   },
   "loggingIn": {
     "message": "Logging in..."
+  },
+  "quickStart": {
+    "message": "Quick Start"
+  },
+  "tipPinExtension": {
+    "message": "Pin Extension"
+  },
+  "tipPinExtensionDesc": {
+    "message": "Click the Extensions icon (🧩) in toolbar, then pin QuickMark for quick access"
+  },
+  "tipOneClickBookmark": {
+    "message": "One-Click Bookmark"
+  },
+  "tipOneClickBookmarkDesc": {
+    "message": "Click the QuickMark icon to bookmark or unbookmark the current page"
+  },
+  "tipKeyboardShortcut": {
+    "message": "Keyboard Shortcut"
+  },
+  "tipKeyboardShortcutDesc": {
+    "message": "Press Ctrl+Shift+S (Mac: Cmd+Shift+S) to quickly bookmark or unbookmark"
   }
 }

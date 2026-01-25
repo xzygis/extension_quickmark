@@ -197,6 +197,9 @@ async function init() {
   await loadMessages();
   loadSettings();
   
+  const manifest = chrome.runtime.getManifest();
+  document.getElementById('versionText').textContent = 'v' + manifest.version;
+  
   document.getElementById('themeSelector').addEventListener('click', (e) => {
     const btn = e.target.closest('.theme-option');
     if (!btn) return;

@@ -346,5 +346,26 @@
   },
   "loggingIn": {
     "message": "登录中..."
+  },
+  "quickStart": {
+    "message": "快速上手"
+  },
+  "tipPinExtension": {
+    "message": "固定插件"
+  },
+  "tipPinExtensionDesc": {
+    "message": "点击工具栏右侧的扩展程序图标（🧩），将 QuickMark 固定到工具栏以便快速访问"
+  },
+  "tipOneClickBookmark": {
+    "message": "一键收藏"
+  },
+  "tipOneClickBookmarkDesc": {
+    "message": "点击 QuickMark 图标即可收藏或取消收藏当前页面"
+  },
+  "tipKeyboardShortcut": {
+    "message": "快捷键"
+  },
+  "tipKeyboardShortcutDesc": {
+    "message": "按 Ctrl+Shift+S（Mac: Cmd+Shift+S）快速收藏或取消收藏"
   }
 }
