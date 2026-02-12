@@ -168,10 +168,13 @@ function handleImport(e) {
 async function clearAllData() {
   if (confirm(i18n('confirmClearAll'))) {
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'firebase_clearCloud' });
-      if (response.error) {
-        showToast(i18n('clearFailed') + ': ' + response.error, 'error');
-        return;
+      const user = await window.FirebaseAuth.getCurrentUser();
+      
+      if (user) {
+        const response = await chrome.runtime.sendMessage({ action: 'firebase_clearCloud' });
+        if (response.error) {
+          console.warn('Cloud clear failed:', response.error);
+        }
       }
       
       chrome.storage.local.remove([

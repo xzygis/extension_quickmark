@@ -7,13 +7,55 @@ const FIREBASE_CONFIG = {
   appId: "1:169990336049:web:7a0812b54db215caa5af10"
 };
 
+const CHROME_CLIENT_ID = "169990336049-2qbinsm16kduu9f5k1uq514103gujf1b.apps.googleusercontent.com";
+const WEB_CLIENT_ID = "169990336049-dtvmv1si491fnnu3sf5g334coooeg02c.apps.googleusercontent.com";
 const FIRESTORE_BASE_URL = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents`;
+const SYNC_ALARM_NAME = 'quickmark-daily-sync';
+const SYNC_INTERVAL_MINUTES = 60 * 12;
 
 let currentUser = null;
 let idToken = null;
 
+function isEdgeBrowser() {
+  return navigator.userAgent.includes('Edg/');
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get({ bookmarks: [] }, () => {});
+  setupSyncAlarm();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  setupSyncAlarm();
+});
+
+function setupSyncAlarm() {
+  chrome.alarms.get(SYNC_ALARM_NAME, (alarm) => {
+    if (!alarm) {
+      chrome.alarms.create(SYNC_ALARM_NAME, {
+        delayInMinutes: 1,
+        periodInMinutes: SYNC_INTERVAL_MINUTES
+      });
+    }
+  });
+}
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === SYNC_ALARM_NAME) {
+    try {
+      const user = await initAuth();
+      if (user) {
+        const stored = await chrome.storage.local.get(['autoSyncEnabled']);
+        if (stored.autoSyncEnabled !== false) {
+          console.log('[Sync Alarm] Performing scheduled sync...');
+          await performSync();
+          console.log('[Sync Alarm] Sync completed');
+        }
+      }
+    } catch (err) {
+      console.error('[Sync Alarm] Failed:', err);
+    }
+  }
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -54,16 +96,46 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 async function initAuth() {
-  const stored = await chrome.storage.local.get(['firebaseUser', 'firebaseToken', 'tokenExpiry']);
-  if (stored.firebaseUser && stored.firebaseToken && stored.tokenExpiry > Date.now()) {
-    currentUser = stored.firebaseUser;
-    idToken = stored.firebaseToken;
-    return currentUser;
+  const stored = await chrome.storage.local.get(['firebaseUser', 'firebaseToken', 'firebaseRefreshToken', 'tokenExpiry']);
+  
+  if (stored.firebaseUser && stored.firebaseToken) {
+    const bufferTime = 5 * 60 * 1000;
+    if (stored.tokenExpiry && stored.tokenExpiry > Date.now() + bufferTime) {
+      currentUser = stored.firebaseUser;
+      idToken = stored.firebaseToken;
+      return currentUser;
+    }
+    
+    if (stored.firebaseRefreshToken) {
+      try {
+        console.log('[Auth] Token expired, refreshing...');
+        await refreshToken();
+        return currentUser;
+      } catch (err) {
+        console.error('[Auth] Token refresh failed:', err);
+        await signOut();
+        return null;
+      }
+    }
   }
+  
   return null;
 }
 
 async function signInWithGoogle() {
+  if (isEdgeBrowser()) {
+    return signInWithWebAuthFlow();
+  }
+  
+  try {
+    return await signInWithChromeIdentity();
+  } catch (err) {
+    console.log('[Auth] Chrome identity failed, falling back to web auth flow:', err.message);
+    return signInWithWebAuthFlow();
+  }
+}
+
+async function signInWithChromeIdentity() {
   return new Promise((resolve, reject) => {
     chrome.identity.getAuthToken({ interactive: true }, async (token) => {
       if (chrome.runtime.lastError) {
@@ -77,7 +149,7 @@ async function signInWithGoogle() {
       }
       
       try {
-        const credential = await exchangeGoogleToken(token);
+        const credential = await exchangeGoogleToken(token, false);
         resolve(credential);
       } catch (error) {
         reject(error);
@@ -86,7 +158,59 @@ async function signInWithGoogle() {
   });
 }
 
-async function exchangeGoogleToken(googleAccessToken) {
+async function signInWithWebAuthFlow() {
+  const redirectUri = chrome.identity.getRedirectURL();
+  const scopes = ['openid', 'email', 'profile'].join(' ');
+  
+  console.log('[Auth] Redirect URI:', redirectUri);
+  console.log('[Auth] Using Web Client ID for launchWebAuthFlow');
+  
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authUrl.searchParams.set('client_id', WEB_CLIENT_ID);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'token');
+  authUrl.searchParams.set('scope', scopes);
+  
+  return new Promise((resolve, reject) => {
+    chrome.identity.launchWebAuthFlow(
+      { url: authUrl.toString(), interactive: true },
+      async (responseUrl) => {
+        if (chrome.runtime.lastError) {
+          console.error('[Auth] WebAuthFlow error:', chrome.runtime.lastError.message);
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        
+        if (!responseUrl) {
+          reject(new Error('No response URL'));
+          return;
+        }
+        
+        try {
+          const url = new URL(responseUrl);
+          const hashParams = new URLSearchParams(url.hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          
+          if (!accessToken) {
+            reject(new Error('No access token in response'));
+            return;
+          }
+          
+          const credential = await exchangeGoogleToken(accessToken, true);
+          resolve(credential);
+        } catch (error) {
+          reject(error);
+        }
+      }
+    );
+  });
+}
+
+async function exchangeGoogleToken(googleAccessToken, useWebAuthFlow = false) {
+  const requestUri = useWebAuthFlow 
+    ? chrome.identity.getRedirectURL()
+    : `https://${chrome.runtime.id}.chromiumapp.org/`;
+  
   const response = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_CONFIG.apiKey}`,
     {
@@ -94,7 +218,7 @@ async function exchangeGoogleToken(googleAccessToken) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         postBody: `access_token=${googleAccessToken}&providerId=google.com`,
-        requestUri: `https://${chrome.runtime.id}.chromiumapp.org/`,
+        requestUri: requestUri,
         returnIdpCredential: true,
         returnSecureToken: true
       })
@@ -155,6 +279,9 @@ async function refreshToken() {
   
   const tokenExpiry = Date.now() + (parseInt(data.expires_in) * 1000) - 60000;
   
+  const userStored = await chrome.storage.local.get(['firebaseUser']);
+  currentUser = userStored.firebaseUser;
+  
   await chrome.storage.local.set({
     firebaseToken: idToken,
     firebaseRefreshToken: data.refresh_token,
@@ -166,7 +293,8 @@ async function refreshToken() {
 
 async function getValidToken() {
   const stored = await chrome.storage.local.get(['tokenExpiry']);
-  if (!idToken || !stored.tokenExpiry || stored.tokenExpiry < Date.now()) {
+  const bufferTime = 5 * 60 * 1000;
+  if (!idToken || !stored.tokenExpiry || stored.tokenExpiry < Date.now() + bufferTime) {
     return await refreshToken();
   }
   return idToken;
@@ -175,6 +303,15 @@ async function getValidToken() {
 async function signOut() {
   currentUser = null;
   idToken = null;
+  
+  if (!isEdgeBrowser()) {
+    try {
+      await new Promise((resolve) => {
+        chrome.identity.clearAllCachedAuthTokens(resolve);
+      });
+    } catch (e) {}
+  }
+  
   await chrome.storage.local.remove([
     'firebaseUser', 
     'firebaseToken', 
@@ -412,18 +549,22 @@ async function shouldAutoSync() {
   }
   
   if (!currentUser) {
-    return false;
+    const user = await initAuth();
+    if (!user) return false;
   }
   
   const lastSync = stored.lastSyncTime || 0;
-  const oneDayMs = 24 * 60 * 60 * 1000;
+  const twelveHoursMs = 12 * 60 * 60 * 1000;
   
-  return Date.now() - lastSync > oneDayMs;
+  return Date.now() - lastSync > twelveHoursMs;
 }
 
 async function performSync() {
   if (!currentUser) {
-    throw new Error('Not authenticated');
+    const user = await initAuth();
+    if (!user) {
+      throw new Error('Not authenticated');
+    }
   }
   
   const localData = await chrome.storage.local.get(['bookmarks', 'groupOrder', 'deletedUrls']);

@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqxr/nTaRD30+pv3tRO8gUC726hebJ1CbabO0UIn1KWTFOHKOigcKcNC5MtNnX1kPrfNRBIIpu19EwE3pz8Ai0B0X2nGkJqMhzRP7jjYzBWoyh1BUV2nWHCS4PqyxZtV9qJ3SD1Oyj1u+Nx9kHeddkHUpK9exE6naiOG4hvedMaVHukZZiymMtgsOB91sgN9agMMNANlUZObVauVzS0doHnA2f6pqBwegcAWOKoBipTssm5xyEO6pTYt6DgNaqRSgC3jsFZs/3+QM5pQy+Cy0pQGkYC8a1zKs5josN4c3wZme6a58QC+7gcfpjgVe7JJgb31T3bzNQpWjt63dJGNtkwIDAQAB",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "tabs", "identity"],
+  "permissions": ["storage", "tabs", "identity", "alarms"],
   "oauth2": {
     "client_id": "169990336049-2qbinsm16kduu9f5k1uq514103gujf1b.apps.googleusercontent.com",
     "scopes": ["openid", "email", "profile"]
