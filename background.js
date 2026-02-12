@@ -170,6 +170,7 @@ async function signInWithWebAuthFlow() {
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('response_type', 'token');
   authUrl.searchParams.set('scope', scopes);
+  authUrl.searchParams.set('prompt', 'select_account');
   
   return new Promise((resolve, reject) => {
     chrome.identity.launchWebAuthFlow(
@@ -306,10 +307,21 @@ async function signOut() {
   
   if (!isEdgeBrowser()) {
     try {
+      const token = await new Promise((resolve) => {
+        chrome.identity.getAuthToken({ interactive: false }, resolve);
+      });
+      if (token) {
+        await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`);
+        await new Promise((resolve) => {
+          chrome.identity.removeCachedAuthToken({ token }, resolve);
+        });
+      }
       await new Promise((resolve) => {
         chrome.identity.clearAllCachedAuthTokens(resolve);
       });
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[Auth] Error during sign out:', e);
+    }
   }
   
   await chrome.storage.local.remove([
