@@ -8,6 +8,10 @@
   <strong>一键收藏，智能分组，让新标签页成为你的书签仪表盘</strong>
 </p>
 
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/quickmark/gaeeamadlnkenibiggoamillnanhldde">Chrome Web Store</a>
+</p>
+
 ## ✨ 功能特性
 
 - ⭐ **一键收藏** - 点击扩展图标即可快速保存或移除当前页面
@@ -15,7 +19,8 @@
 - 🏷️ **智能分组** - 自动按域名分组，支持自定义分组和标签
 - 🔍 **即时搜索** - 实时搜索，快速定位任意书签
 - 🎨 **精美设计** - 简洁现代界面，支持浅色/深色/跟随系统主题
-- ☁️ **云端同步** - 使用 Google 账号登录，跨设备同步书签数据
+- ☁️ **云端同步** - 使用 Google 账号登录，跨设备自动同步书签数据
+- 🌐 **跨浏览器** - 支持 Chrome 和 Microsoft Edge 浏览器
 - 🌍 **多语言** - 支持中文和英文界面
 - 🔒 **隐私优先** - 数据本地存储优先，云端同步可选
 - ⌨️ **快捷键** - `Ctrl+Shift+S` (Mac: `Cmd+Shift+S`) 快速收藏
@@ -24,9 +29,9 @@
 
 ### Chrome / Edge 浏览器
 
-👉 [点击安装 QuickMark](https://chromewebstore.google.com/detail/quickmark/gaeeamadlnkenibiggoamillnanhldde)
+👉 [Chrome Web Store 安装](https://chromewebstore.google.com/detail/quickmark/gaeeamadlnkenibiggoamillnanhldde)
 
-或在 Chrome 应用商店搜索「QuickMark」
+> Edge 浏览器也可以从 Chrome Web Store 安装扩展
 
 ## 🚀 使用指南
 
@@ -49,6 +54,7 @@
 - 在「云端同步」部分点击「登录」使用 Google 账号登录
 - 登录后可开启自动同步，或手动点击「立即同步」
 - 支持跨设备同步书签数据
+- 自动同步每 12 小时执行一次
 
 ### 设置选项
 - 点击右上角「⚙」进入设置页面
@@ -61,6 +67,7 @@
 - **布局**：CSS Grid + 瀑布流自适应
 - **存储**：Chrome Storage API（本地存储）
 - **云同步**：Firebase + Google OAuth 2.0
+- **定时任务**：Chrome Alarms API（后台自动同步）
 - **国际化**：Chrome i18n API
 
 ## 📁 项目结构
@@ -83,6 +90,16 @@ extension_quickmark/
 ```
 
 ## 📝 更新日志
+
+### v2.0.3
+- 修复退出登录后重新登录时自动使用上次账号的问题
+- 现在会显示账号选择界面
+
+### v2.0.2
+- 新增 Microsoft Edge 浏览器支持
+- 优化 Token 自动刷新，保持登录状态稳定
+- 使用 Chrome Alarms API 实现每 12 小时后台自动同步
+- 修复未登录时清除数据报错的问题
 
 ### v2.0.0
 - 新增 Google 账号云端同步功能
