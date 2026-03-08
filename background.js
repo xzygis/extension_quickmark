@@ -98,24 +98,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function initAuth() {
   const stored = await chrome.storage.local.get(['firebaseUser', 'firebaseToken', 'firebaseRefreshToken', 'tokenExpiry']);
   
-  if (stored.firebaseUser && stored.firebaseToken) {
-    const bufferTime = 5 * 60 * 1000;
-    if (stored.tokenExpiry && stored.tokenExpiry > Date.now() + bufferTime) {
-      currentUser = stored.firebaseUser;
-      idToken = stored.firebaseToken;
+  if (stored.firebaseUser) {
+    currentUser = stored.firebaseUser;
+  }
+  
+  const bufferTime = 5 * 60 * 1000;
+  if (stored.firebaseUser && stored.firebaseToken && stored.tokenExpiry && stored.tokenExpiry > Date.now() + bufferTime) {
+    idToken = stored.firebaseToken;
+    return currentUser;
+  }
+  
+  if (stored.firebaseRefreshToken && stored.firebaseUser) {
+    try {
+      console.log('[Auth] Token missing or expired, refreshing...');
+      await refreshToken({ signOutOnAuthError: false });
       return currentUser;
-    }
-    
-    if (stored.firebaseRefreshToken) {
-      try {
-        console.log('[Auth] Token expired, refreshing...');
-        await refreshToken();
-        return currentUser;
-      } catch (err) {
-        console.error('[Auth] Token refresh failed:', err);
-        await signOut();
-        return null;
-      }
+    } catch (err) {
+      console.warn('[Auth] Token refresh skipped during init:', err.message);
+      return currentUser;
     }
   }
   
@@ -255,7 +255,20 @@ async function exchangeGoogleToken(googleAccessToken, useWebAuthFlow = false) {
   return currentUser;
 }
 
-async function refreshToken() {
+function shouldSignOutAfterRefreshFailure(errorMessage) {
+  const authFailureKeywords = [
+    'INVALID_REFRESH_TOKEN',
+    'INVALID_GRANT',
+    'TOKEN_EXPIRED',
+    'USER_DISABLED',
+    'PROJECT_NUMBER_MISMATCH',
+    'MISSING_REFRESH_TOKEN'
+  ];
+  return authFailureKeywords.some(keyword => errorMessage.includes(keyword));
+}
+
+async function refreshToken(options = {}) {
+  const signOutOnAuthError = options.signOutOnAuthError !== false;
   const stored = await chrome.storage.local.get(['firebaseRefreshToken']);
   if (!stored.firebaseRefreshToken) {
     throw new Error('No refresh token available');
@@ -271,8 +284,20 @@ async function refreshToken() {
   );
   
   if (!response.ok) {
-    await signOut();
-    throw new Error('Token refresh failed');
+    let errorMessage = 'Token refresh failed';
+    try {
+      const errorData = await response.json();
+      if (errorData?.error?.message) {
+        errorMessage = errorData.error.message;
+      }
+    } catch (e) {
+      errorMessage = 'Token refresh failed';
+    }
+    
+    if (signOutOnAuthError && shouldSignOutAfterRefreshFailure(errorMessage)) {
+      await signOut();
+    }
+    throw new Error(errorMessage);
   }
   
   const data = await response.json();
@@ -296,7 +321,7 @@ async function getValidToken() {
   const stored = await chrome.storage.local.get(['tokenExpiry']);
   const bufferTime = 5 * 60 * 1000;
   if (!idToken || !stored.tokenExpiry || stored.tokenExpiry < Date.now() + bufferTime) {
-    return await refreshToken();
+    return await refreshToken({ signOutOnAuthError: true });
   }
   return idToken;
 }
