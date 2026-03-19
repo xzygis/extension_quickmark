@@ -367,5 +367,11 @@
   },
   "tipKeyboardShortcutDesc": {
     "message": "按 Ctrl+Shift+S（Mac: Cmd+Shift+S）快速收藏或取消收藏"
+  },
+  "actionAddBookmark": {
+    "message": "添加收藏"
+  },
+  "actionRemoveBookmark": {
+    "message": "取消收藏"
   }
 }

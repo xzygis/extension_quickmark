@@ -23,11 +23,23 @@ function isEdgeBrowser() {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get({ bookmarks: [] }, () => {});
   setupSyncAlarm();
+  initAllTabsBadge();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   setupSyncAlarm();
+  initAllTabsBadge();
 });
+
+async function initAllTabsBadge() {
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach(tab => {
+      if (tab.id && tab.url) {
+        updateTabBadge(tab.id, tab.url);
+      }
+    });
+  });
+}
 
 function setupSyncAlarm() {
   chrome.alarms.get(SYNC_ALARM_NAME, (alarm) => {
@@ -446,6 +458,81 @@ async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}
   
   return true;
 }
+
+// === Bookmark Badge/Icon Indicator Logic ===
+
+async function updateTabBadge(tabId, url) {
+  if (!url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) {
+    chrome.action.setIcon({
+      tabId: tabId,
+      path: {
+        "16": "icon_gray16.png",
+        "48": "icon_gray48.png",
+        "128": "icon_gray128.png"
+      }
+    });
+    chrome.action.setBadgeText({ text: '', tabId: tabId });
+    chrome.action.setTitle({ title: chrome.i18n.getMessage("extName"), tabId: tabId });
+    return;
+  }
+
+  const data = await chrome.storage.local.get({ bookmarks: [] });
+  const isBookmarked = data.bookmarks.some(b => b.url === url);
+
+  if (isBookmarked) {
+    chrome.action.setIcon({
+      tabId: tabId,
+      path: {
+        "16": "icon16.png",
+        "48": "icon48.png",
+        "128": "icon128.png"
+      }
+    });
+    chrome.action.setBadgeText({ text: '', tabId: tabId });
+    
+    // We get the localized string or fallback
+    const titleText = chrome.i18n.getMessage("actionRemoveBookmark") || "取消收藏 / Remove Bookmark";
+    chrome.action.setTitle({ title: titleText, tabId: tabId });
+  } else {
+    chrome.action.setIcon({
+      tabId: tabId,
+      path: {
+        "16": "icon_gray16.png",
+        "48": "icon_gray48.png",
+        "128": "icon_gray128.png"
+      }
+    });
+    chrome.action.setBadgeText({ text: '', tabId: tabId });
+    
+    const titleText = chrome.i18n.getMessage("actionAddBookmark") || "添加收藏 / Add Bookmark";
+    chrome.action.setTitle({ title: titleText, tabId: tabId });
+  }
+}
+
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    updateTabBadge(activeInfo.tabId, tab.url);
+  } catch (err) {
+    console.warn('[Badge] Error getting tab on activated:', err);
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url || changeInfo.status === 'complete') {
+    updateTabBadge(tabId, tab.url);
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'local' && changes.bookmarks) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs.length > 0) {
+        updateTabBadge(tabs[0].id, tabs[0].url);
+      }
+    });
+  }
+});
 
 async function fetchBookmarksFromCloud() {
   if (!currentUser) {

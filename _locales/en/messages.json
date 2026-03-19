@@ -367,5 +367,11 @@
   },
   "tipKeyboardShortcutDesc": {
     "message": "Press Ctrl+Shift+S (Mac: Cmd+Shift+S) to quickly bookmark or unbookmark"
+  },
+  "actionAddBookmark": {
+    "message": "Add Bookmark"
+  },
+  "actionRemoveBookmark": {
+    "message": "Remove Bookmark"
   }
 }
