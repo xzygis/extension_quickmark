@@ -373,5 +373,14 @@
   },
   "actionRemoveBookmark": {
     "message": "Remove Bookmark"
+  },
+  "pin": {
+    "message": "Pin"
+  },
+  "unpin": {
+    "message": "Unpin"
+  },
+  "rename": {
+    "message": "Rename"
   }
 }

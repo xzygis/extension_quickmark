@@ -399,7 +399,7 @@ async function ensureUserDocument() {
   }
 }
 
-async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}) {
+async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}, pinnedGroups = []) {
   if (!currentUser) {
     throw new Error('Not authenticated');
   }
@@ -418,7 +418,7 @@ async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}
         tags: { arrayValue: { values: (b.tags || []).map(t => ({ stringValue: t })) } },
         createdAt: { integerValue: String(b.createdAt || Date.now()) },
         clickCount: { integerValue: String(b.clickCount || 0) },
-        lastClickAt: { integerValue: String(b.lastClickAt || 0) }
+        lastActiveAt: { integerValue: String(b.lastActiveAt || 0) }
       }
     }
   }));
@@ -442,6 +442,7 @@ async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}
       fields: {
         bookmarks: { arrayValue: { values: bookmarksData } },
         groupOrder: { arrayValue: { values: groupOrder.map(g => ({ stringValue: g })) } },
+        pinnedGroups: { arrayValue: { values: (pinnedGroups || []).map(g => ({ stringValue: g })) } },
         deletedUrls: { arrayValue: { values: deletedUrlsData } },
         updatedAt: { timestampValue: new Date().toISOString() },
         deviceId: { stringValue: await getDeviceId() }
@@ -521,8 +522,46 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === 'complete') {
     updateTabBadge(tabId, tab.url);
+    
+    // Automatically update bookmark access stats if the URL matches a bookmark
+    if (changeInfo.status === 'complete' && tab.url) {
+      updateBookmarkVisit(tab.url);
+    }
   }
 });
+
+async function updateBookmarkVisit(url) {
+  // Normalize URL to handle trailing slashes etc.
+  const normalize = (u) => {
+    try {
+      const urlObj = new URL(u);
+      return urlObj.origin + urlObj.pathname.replace(/\/$/, '') + urlObj.search;
+    } catch (e) {
+      return u;
+    }
+  };
+
+  const normalizedUrl = normalize(url);
+  const data = await chrome.storage.local.get({ bookmarks: [] });
+  const bookmarks = data.bookmarks;
+  
+  let changed = false;
+  bookmarks.forEach(b => {
+    if (normalize(b.url) === normalizedUrl) {
+      b.clickCount = (b.clickCount || 0) + 1;
+      b.lastActiveAt = Date.now();
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    await chrome.storage.local.set({ bookmarks });
+    console.log('[Visit] Updated bookmark stats for:', url);
+    
+    // Optionally trigger a sync if needed, but maybe not every time to save quota
+    // shouldAutoSync().then(should => { if (should) performSync(); });
+  }
+}
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'local' && changes.bookmarks) {
@@ -547,7 +586,7 @@ async function fetchBookmarksFromCloud() {
   });
   
   if (response.status === 404) {
-    return { bookmarks: [], groupOrder: [] };
+    return { bookmarks: [], groupOrder: [], pinnedGroups: [] };
   }
   
   if (!response.ok) {
@@ -558,7 +597,7 @@ async function fetchBookmarksFromCloud() {
   const data = await response.json();
   
   if (!data.fields) {
-    return { bookmarks: [], groupOrder: [], deletedUrls: {} };
+    return { bookmarks: [], groupOrder: [], pinnedGroups: [], deletedUrls: {} };
   }
   
   const bookmarks = (data.fields.bookmarks?.arrayValue?.values || []).map(item => {
@@ -572,11 +611,12 @@ async function fetchBookmarksFromCloud() {
       tags: (fields.tags?.arrayValue?.values || []).map(t => t.stringValue),
       createdAt: parseInt(fields.createdAt?.integerValue || '0'),
       clickCount: parseInt(fields.clickCount?.integerValue || '0'),
-      lastClickAt: parseInt(fields.lastClickAt?.integerValue || '0')
+      lastActiveAt: parseInt(fields.lastActiveAt?.integerValue || '0')
     };
   });
   
   const groupOrder = (data.fields.groupOrder?.arrayValue?.values || []).map(g => g.stringValue);
+  const pinnedGroups = (data.fields.pinnedGroups?.arrayValue?.values || []).map(g => g.stringValue);
   
   const deletedUrls = {};
   (data.fields.deletedUrls?.arrayValue?.values || []).forEach(item => {
@@ -588,7 +628,7 @@ async function fetchBookmarksFromCloud() {
     }
   });
   
-  return { bookmarks, groupOrder, deletedUrls };
+  return { bookmarks, groupOrder, pinnedGroups, deletedUrls };
 }
 
 async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, cloudDeletedUrls) {
@@ -602,7 +642,7 @@ async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, 
   
   cloudBookmarks.forEach(b => {
     const deletedAt = mergedDeletedUrls[b.url];
-    const bookmarkTime = Math.max(b.lastClickAt || 0, b.createdAt || 0);
+    const bookmarkTime = Math.max(b.lastActiveAt || 0, b.createdAt || 0);
     if (!deletedAt || bookmarkTime > deletedAt) {
       merged.set(b.url, b);
     }
@@ -610,7 +650,7 @@ async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, 
   
   localBookmarks.forEach(b => {
     const deletedAt = mergedDeletedUrls[b.url];
-    const bookmarkTime = Math.max(b.lastClickAt || 0, b.createdAt || 0);
+    const bookmarkTime = Math.max(b.lastActiveAt || 0, b.createdAt || 0);
     
     if (deletedAt && bookmarkTime <= deletedAt) {
       return;
@@ -622,8 +662,8 @@ async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, 
     } else {
       const localTime = b.createdAt || 0;
       const cloudTime = existing.createdAt || 0;
-      const localClick = b.lastClickAt || 0;
-      const cloudClick = existing.lastClickAt || 0;
+      const localClick = b.lastActiveAt || 0;
+      const cloudClick = existing.lastActiveAt || 0;
       
       if (localClick > cloudClick || (localClick === cloudClick && localTime > cloudTime)) {
         merged.set(b.url, {
@@ -691,18 +731,15 @@ async function performSync() {
     }
   }
   
-  const localData = await chrome.storage.local.get(['bookmarks', 'groupOrder', 'deletedUrls']);
+  const localData = await chrome.storage.local.get(['bookmarks', 'groupOrder', 'pinnedGroups', 'deletedUrls']);
   const localBookmarks = localData.bookmarks || [];
   const localGroupOrder = localData.groupOrder || [];
+  const localPinnedGroups = localData.pinnedGroups || [];
   const localDeletedUrls = localData.deletedUrls || {};
   
   console.log('[Sync] Local bookmarks:', localBookmarks.length);
-  console.log('[Sync] Local deletedUrls:', localDeletedUrls);
   
   const cloudData = await fetchBookmarksFromCloud();
-  
-  console.log('[Sync] Cloud bookmarks:', cloudData.bookmarks.length);
-  console.log('[Sync] Cloud deletedUrls:', cloudData.deletedUrls);
   
   const mergeResult = await mergeBookmarks(
     localBookmarks, 
@@ -711,18 +748,17 @@ async function performSync() {
     cloudData.deletedUrls || {}
   );
   
-  console.log('[Sync] Merged bookmarks:', mergeResult.bookmarks.length);
-  console.log('[Sync] Merged deletedUrls:', mergeResult.deletedUrls);
-  
   const mergedGroupOrder = localGroupOrder.length > 0 ? localGroupOrder : cloudData.groupOrder;
+  const mergedPinnedGroups = localPinnedGroups.length > 0 ? localPinnedGroups : (cloudData.pinnedGroups || []);
   
   await chrome.storage.local.set({
     bookmarks: mergeResult.bookmarks,
     groupOrder: mergedGroupOrder,
+    pinnedGroups: mergedPinnedGroups,
     deletedUrls: mergeResult.deletedUrls
   });
   
-  await syncBookmarksToCloud(mergeResult.bookmarks, mergedGroupOrder, mergeResult.deletedUrls);
+  await syncBookmarksToCloud(mergeResult.bookmarks, mergedGroupOrder, mergeResult.deletedUrls, mergedPinnedGroups);
   
   return {
     localCount: localBookmarks.length,

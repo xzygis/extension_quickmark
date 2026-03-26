@@ -7,7 +7,7 @@ let activeTagFilter = null;
 let batchMode = false;
 let editingBookmarkId = null;
 let groupOrder = [];
-let draggedGroup = null;
+let pinnedGroups = [];
 let currentLang = 'auto';
 let lastGroupOrder = [];
 let skipGroupReorder = false;
@@ -124,7 +124,7 @@ function showTip(msg, type = 'success') {
 }
 
 function saveBookmarks(callback) {
-  chrome.storage.local.set({ bookmarks, groupOrder }, callback);
+  chrome.storage.local.set({ bookmarks, groupOrder, pinnedGroups }, callback);
 }
 
 function deleteBookmarkWithRecord(bookmarkId, url, callback) {
@@ -148,9 +148,10 @@ function batchDeleteWithRecord(ids, urls, callback) {
 }
 
 function loadBookmarks(callback) {
-  chrome.storage.local.get({ bookmarks: [], groupOrder: [], viewMode: 'card', sortMode: 'recent', lang: 'auto', theme: 'light' }, (data) => {
+  chrome.storage.local.get({ bookmarks: [], groupOrder: [], pinnedGroups: [], viewMode: 'card', sortMode: 'recent', lang: 'auto', theme: 'light' }, (data) => {
     bookmarks = data.bookmarks;
     groupOrder = data.groupOrder || [];
+    pinnedGroups = data.pinnedGroups || [];
     currentView = data.viewMode || 'card';
     currentSort = data.sortMode || 'recent';
     currentLang = data.lang || 'auto';
@@ -209,18 +210,42 @@ function groupBookmarks() {
     groups[g] = [...groups[g]].sort((a, b) => getLastActiveTime(b) - getLastActiveTime(a));
   });
   
-  const existingGroups = Object.keys(groups);
-  const orderedGroups = [];
+  const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
   
-  groupOrder.forEach(g => {
-    if (groups[g]) orderedGroups.push(g);
+  const groupsWithScore = Object.keys(groups).map(name => {
+    const items = groups[name];
+    const size = items.length;
+    const recentCount = items.filter(b => getLastActiveTime(b) > sevenDaysAgo).length;
+    const totalClicks = items.reduce((sum, b) => sum + (b.clickCount || 0), 0);
+    const isPinned = pinnedGroups.includes(name);
+    
+    // Balanced score calculation: size + recent activity weight + historical popularity
+    const score = size + (recentCount * 2) + (totalClicks * 0.1);
+    
+    return { name, items, size, score, isPinned };
   });
-  
-  existingGroups.forEach(g => {
-    if (!orderedGroups.includes(g)) orderedGroups.push(g);
+
+  // Sort by pinned status first, then by score
+  groupsWithScore.sort((a, b) => {
+    if (a.isPinned !== b.isPinned) {
+      return a.isPinned ? -1 : 1;
+    }
+    return b.score - a.score;
   });
+
+  const orderedGroups = groupsWithScore.map(g => g.name);
   
-  return { groups, orderedGroups };
+  return { groups, orderedGroups, groupsWithScore };
+}
+
+function togglePinGroup(groupName) {
+  const idx = pinnedGroups.indexOf(groupName);
+  if (idx === -1) {
+    pinnedGroups.push(groupName);
+  } else {
+    pinnedGroups.splice(idx, 1);
+  }
+  saveBookmarks(render);
 }
 
 function renderTagFilter() {
@@ -283,8 +308,8 @@ function createBookmarkCard(b) {
         <div class="bookmark-title" title="${b.title}">${b.title}</div>
       </div>
       <div class="bookmark-actions">
-        <button class="bookmark-action-btn edit-btn" title="编辑">✏️</button>
-        <button class="bookmark-action-btn danger delete-btn" title="删除">🗑️</button>
+        <button class="bookmark-action-btn edit-btn" title="${i18n('edit')}">✏️</button>
+        <button class="bookmark-action-btn danger delete-btn" title="${i18n('delete')}">🗑️</button>
       </div>
     `;
   } else if (currentView === 'list') {
@@ -299,8 +324,8 @@ function createBookmarkCard(b) {
         </div>
       </div>
       <div class="bookmark-actions">
-        <button class="bookmark-action-btn edit-btn" title="编辑">✏️</button>
-        <button class="bookmark-action-btn danger delete-btn" title="删除">🗑️</button>
+        <button class="bookmark-action-btn edit-btn" title="${i18n('edit')}">✏️</button>
+        <button class="bookmark-action-btn danger delete-btn" title="${i18n('delete')}">🗑️</button>
       </div>
     `;
   } else {
@@ -317,8 +342,8 @@ function createBookmarkCard(b) {
         ${noteHtml}
       </div>
       <div class="bookmark-actions">
-        <button class="bookmark-action-btn edit-btn" title="编辑">✏️</button>
-        <button class="bookmark-action-btn danger delete-btn" title="删除">🗑️</button>
+        <button class="bookmark-action-btn edit-btn" title="${i18n('edit')}">✏️</button>
+        <button class="bookmark-action-btn danger delete-btn" title="${i18n('delete')}">🗑️</button>
       </div>
     `;
   }
@@ -384,9 +409,13 @@ function createBookmarkCard(b) {
 function createGroupElement(groupName, items) {
   const group = document.createElement('div');
   group.className = 'group';
+  if (pinnedGroups.includes(groupName)) {
+    group.classList.add('pinned');
+  }
   group.dataset.group = groupName;
   
   const color = getGroupColor(groupName);
+  const isPinned = pinnedGroups.includes(groupName);
   
   group.innerHTML = `
     <div class="group-header">
@@ -394,74 +423,26 @@ function createGroupElement(groupName, items) {
         <div class="group-color" style="background: ${color}"></div>
         <span class="group-title">${groupName}</span>
         <span class="group-count">${items.length}</span>
+        ${isPinned ? '<span class="pinned-badge">📌</span>' : ''}
       </div>
       <div class="group-actions">
-        <button class="group-action-btn rename-btn" title="重命名">✏️</button>
+        <button class="group-action-btn pin-btn" title="${isPinned ? i18n('unpin') : i18n('pin')}">${isPinned ? '📍' : '📌'}</button>
+        <button class="group-action-btn rename-btn" title="${i18n('rename')}">✏️</button>
       </div>
     </div>
     <div class="bookmark-list"></div>
   `;
   
-  const header = group.querySelector('.group-header');
-  header.draggable = true;
-  
-  header.ondragstart = (e) => {
-    draggedGroup = groupName;
-    group.classList.add('dragging');
-    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'group', groupName }));
+  const list = group.querySelector('.bookmark-list');
+  sortBookmarks(items).forEach(b => {
+    list.appendChild(createBookmarkCard(b));
+  });
+
+  group.querySelector('.pin-btn').onclick = (e) => {
+    e.stopPropagation();
+    togglePinGroup(groupName);
   };
-  
-  header.ondragend = () => {
-    draggedGroup = null;
-    group.classList.remove('dragging');
-  };
-  
-  header.ondragover = (e) => {
-    e.preventDefault();
-    if (draggedGroup && draggedGroup !== groupName) {
-      group.style.outline = '2px dashed var(--primary)';
-    }
-  };
-  
-  header.ondragleave = () => {
-    group.style.outline = '';
-  };
-  
-  header.ondrop = (e) => {
-    e.preventDefault();
-    group.style.outline = '';
-    
-    try {
-      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-      
-      if (data.type === 'group' && data.groupName !== groupName) {
-        const fromIdx = groupOrder.indexOf(data.groupName);
-        const toIdx = groupOrder.indexOf(groupName);
-        
-        if (fromIdx === -1) {
-          groupOrder.push(data.groupName);
-        }
-        if (toIdx === -1) {
-          groupOrder.push(groupName);
-        }
-        
-        const newFromIdx = groupOrder.indexOf(data.groupName);
-        const newToIdx = groupOrder.indexOf(groupName);
-        
-        groupOrder.splice(newFromIdx, 1);
-        groupOrder.splice(newToIdx, 0, data.groupName);
-        
-        saveBookmarks(render);
-      } else if (data.id) {
-        const bookmark = bookmarks.find(b => b.id === data.id);
-        if (bookmark && bookmark.group !== groupName) {
-          bookmark.group = groupName;
-          saveBookmarks(render);
-        }
-      }
-    } catch {}
-  };
-  
+
   group.querySelector('.rename-btn').onclick = () => {
     const titleEl = group.querySelector('.group-title');
     const input = document.createElement('input');
@@ -497,34 +478,6 @@ function createGroupElement(groupName, items) {
     input.select();
   };
   
-  const list = group.querySelector('.bookmark-list');
-  items.forEach(b => list.appendChild(createBookmarkCard(b)));
-  
-  list.ondragover = (e) => {
-    e.preventDefault();
-    list.style.background = 'var(--bg)';
-  };
-  
-  list.ondragleave = () => {
-    list.style.background = '';
-  };
-  
-  list.ondrop = (e) => {
-    e.preventDefault();
-    list.style.background = '';
-    
-    try {
-      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-      if (data.id && data.fromGroup !== groupName) {
-        const bookmark = bookmarks.find(b => b.id === data.id);
-        if (bookmark) {
-          bookmark.group = groupName;
-          saveBookmarks(render);
-        }
-      }
-    } catch {}
-  };
-  
   return group;
 }
 
@@ -544,34 +497,14 @@ function render() {
   
   emptyState.style.display = 'none';
   
-  const { groups, orderedGroups } = groupBookmarks();
+  const { groupsWithScore } = groupBookmarks();
   
   const containerWidth = container.offsetWidth;
   const colCount = Math.max(1, Math.floor(containerWidth / 300));
   const cols = Array.from({ length: colCount }, () => []);
   const colHeights = Array(colCount).fill(0);
   
-  const groupsWithSize = orderedGroups.map(name => ({
-    name,
-    items: groups[name],
-    size: groups[name].length
-  }));
-  
-  if (skipGroupReorder && lastGroupOrder.length > 0) {
-    groupsWithSize.sort((a, b) => {
-      const aIdx = lastGroupOrder.indexOf(a.name);
-      const bIdx = lastGroupOrder.indexOf(b.name);
-      if (aIdx === -1 && bIdx === -1) return b.size - a.size;
-      if (aIdx === -1) return 1;
-      if (bIdx === -1) return -1;
-      return aIdx - bIdx;
-    });
-  } else {
-    groupsWithSize.sort((a, b) => b.size - a.size);
-    lastGroupOrder = groupsWithSize.map(g => g.name);
-  }
-  
-  groupsWithSize.forEach(({ name, items, size }) => {
+  groupsWithScore.forEach(({ name, items, size }) => {
     const minIdx = colHeights.indexOf(Math.min(...colHeights));
     cols[minIdx].push({ groupName: name, items });
     colHeights[minIdx] += size + 2;
@@ -1370,11 +1303,30 @@ function setupModals() {
   });
 }
 
+function setupI18n() {
+  const viewCard = document.getElementById('viewCard');
+  const viewList = document.getElementById('viewList');
+  const viewHeadline = document.getElementById('viewHeadline');
+  const batchBtn = document.getElementById('batchBtn');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const loginBtn = document.getElementById('loginBtn');
+  const searchInput = document.getElementById('searchInput');
+
+  if (viewCard) viewCard.title = i18n('viewCard');
+  if (viewList) viewList.title = i18n('viewList');
+  if (viewHeadline) viewHeadline.title = i18n('viewHeadline');
+  if (batchBtn) batchBtn.title = i18n('batchMode');
+  if (settingsBtn) settingsBtn.title = i18n('settings');
+  if (loginBtn) loginBtn.textContent = i18n('login');
+  if (searchInput) searchInput.placeholder = i18n('searchPlaceholder');
+}
+
 async function init() {
   await loadMessages();
   
   loadBookmarks(() => {
     applyI18n();
+    setupI18n();
     setupSettingsBtn();
     setupAuth();
     render();

@@ -88,6 +88,9 @@ chrome.storage.local.get({ language: 'auto' }, function(settings) {
         title: tab.title,
         favicon,
         group: targetGroup,
+        tags: [],
+        clickCount: 1,
+        lastActiveAt: Date.now(),
         createdAt: Date.now()
       });
       

@@ -605,11 +605,6 @@ body {
   padding: 10px 14px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-light);
-  cursor: grab;
-}
-
-.group-header:active {
-  cursor: grabbing;
 }
 
 .group-title-wrapper {
@@ -644,6 +639,16 @@ body {
   border: 1px solid var(--border-light);
 }
 
+.pinned-badge {
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.group.pinned {
+  border: 1px solid var(--primary);
+  box-shadow: 0 4px 12px var(--primary-glow);
+}
+
 .group-actions {
   display: flex;
   gap: 4px;
@@ -668,6 +673,19 @@ body {
 
 .group-action-btn:hover {
   background: var(--bg-secondary);
+  color: var(--primary);
+}
+
+.pin-btn {
+  opacity: 0.6;
+}
+
+.group:hover .pin-btn,
+.group.pinned .pin-btn {
+  opacity: 1;
+}
+
+.group.pinned .pin-btn {
   color: var(--primary);
 }
 

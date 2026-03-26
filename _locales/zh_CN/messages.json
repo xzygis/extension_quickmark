@@ -373,5 +373,14 @@
   },
   "actionRemoveBookmark": {
     "message": "取消收藏"
+  },
+  "pin": {
+    "message": "置顶"
+  },
+  "unpin": {
+    "message": "取消置顶"
+  },
+  "rename": {
+    "message": "重命名"
   }
 }
