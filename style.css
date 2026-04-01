@@ -723,6 +723,12 @@ body {
   opacity: 0.5;
 }
 
+.group.drag-over {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.04) 0%, rgba(99, 102, 241, 0.02) 100%);
+  box-shadow: 0 0 0 3px var(--primary-glow), var(--shadow-md);
+}
+
 .bookmark-card.view-list {
   padding: 6px 10px;
   align-items: center;

@@ -438,6 +438,44 @@ function createGroupElement(groupName, items) {
     list.appendChild(createBookmarkCard(b));
   });
 
+  group.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    group.classList.add('drag-over');
+  });
+
+  group.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    group.classList.add('drag-over');
+  });
+
+  group.addEventListener('dragleave', (e) => {
+    if (!group.contains(e.relatedTarget)) {
+      group.classList.remove('drag-over');
+    }
+  });
+
+  group.addEventListener('drop', (e) => {
+    e.preventDefault();
+    group.classList.remove('drag-over');
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      if (data.id && data.fromGroup !== groupName) {
+        const bookmark = bookmarks.find(b => b.id === data.id);
+        if (bookmark) {
+          bookmark.group = groupName;
+          bookmark.lastActiveAt = Date.now();
+          saveBookmarks(() => {
+            showTip(i18n('moved'));
+            render();
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Drop failed:', err);
+    }
+  });
+
   group.querySelector('.pin-btn').onclick = (e) => {
     e.stopPropagation();
     togglePinGroup(groupName);
