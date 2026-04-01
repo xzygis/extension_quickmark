@@ -89,14 +89,23 @@
   "moveToGroup": {
     "message": "Move to Group"
   },
-  "selectGroup": {
-    "message": "Select group"
-  },
   "newGroup": {
     "message": "New group name"
   },
   "addTags": {
     "message": "Add Tags"
+  },
+  "noMatchingBookmarks": {
+    "message": "No matching bookmarks"
+  },
+  "tryOtherKeywords": {
+    "message": "Try other keywords"
+  },
+  "expandAll": {
+    "message": "Expand All"
+  },
+  "collapseAll": {
+    "message": "Collapse All"
   },
   "saved": {
     "message": "Saved"

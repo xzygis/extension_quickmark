@@ -8,9 +8,11 @@ let batchMode = false;
 let editingBookmarkId = null;
 let groupOrder = [];
 let pinnedGroups = [];
+let collapsedGroups = new Set();
 let currentLang = 'auto';
 let lastGroupOrder = [];
 let skipGroupReorder = false;
+let selectedSearchResultIndex = -1;
 
 const messages = {
   en: {},
@@ -98,6 +100,12 @@ function getDomain(url) {
   }
 }
 
+function highlightText(text, keyword) {
+  if (!keyword || !text) return text;
+  const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  return text.replace(regex, '<span class="search-highlight">$1</span>');
+}
+
 function getAllTags() {
   const tagCount = {};
   bookmarks.forEach(b => {
@@ -124,7 +132,12 @@ function showTip(msg, type = 'success') {
 }
 
 function saveBookmarks(callback) {
-  chrome.storage.local.set({ bookmarks, groupOrder, pinnedGroups }, callback);
+  chrome.storage.local.set({ 
+    bookmarks, 
+    groupOrder, 
+    pinnedGroups,
+    collapsedGroups: Array.from(collapsedGroups)
+  }, callback);
 }
 
 function deleteBookmarkWithRecord(bookmarkId, url, callback) {
@@ -148,10 +161,11 @@ function batchDeleteWithRecord(ids, urls, callback) {
 }
 
 function loadBookmarks(callback) {
-  chrome.storage.local.get({ bookmarks: [], groupOrder: [], pinnedGroups: [], viewMode: 'card', sortMode: 'recent', lang: 'auto', theme: 'light' }, (data) => {
+  chrome.storage.local.get({ bookmarks: [], groupOrder: [], pinnedGroups: [], collapsedGroups: [], viewMode: 'card', sortMode: 'recent', lang: 'auto', theme: 'light' }, (data) => {
     bookmarks = data.bookmarks;
     groupOrder = data.groupOrder || [];
     pinnedGroups = data.pinnedGroups || [];
+    collapsedGroups = new Set(data.collapsedGroups || []);
     currentView = data.viewMode || 'card';
     currentSort = data.sortMode || 'recent';
     currentLang = data.lang || 'auto';
@@ -282,18 +296,22 @@ function renderTagFilter() {
   };
 }
 
-function createBookmarkCard(b) {
+function createBookmarkCard(b, keyword = '') {
   const card = document.createElement('div');
   card.className = 'bookmark-card' + (selectedIds.has(b.id) ? ' selected' : '') + ' view-' + currentView;
   card.dataset.id = b.id;
   card.draggable = true;
   
+  const highlightedTitle = highlightText(b.title, keyword);
+  const domain = getDomain(b.url);
+  const highlightedDomain = highlightText(domain, keyword);
+
   const tagsHtml = b.tags && b.tags.length > 0 
-    ? `<div class="bookmark-tags">${b.tags.map(t => `<span class="bookmark-tag">#${t}</span>`).join('')}</div>` 
+    ? `<div class="bookmark-tags">${b.tags.map(t => `<span class="bookmark-tag">#${highlightText(t, keyword)}</span>`).join('')}</div>` 
     : '';
   
   const noteHtml = b.note 
-    ? `<div class="bookmark-note">${b.note}</div>` 
+    ? `<div class="bookmark-note">${highlightText(b.note, keyword)}</div>` 
     : '';
   
   const activeTime = formatTime(getLastActiveTime(b));
@@ -303,9 +321,9 @@ function createBookmarkCard(b) {
   if (currentView === 'headline') {
     cardContent = `
       <input type="checkbox" class="bookmark-checkbox" ${selectedIds.has(b.id) ? 'checked' : ''}>
-      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}" onerror="this.src='icon16.png'">
+      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}">
       <div class="bookmark-content">
-        <div class="bookmark-title" title="${b.title}">${b.title}</div>
+        <div class="bookmark-title" title="${b.title}">${highlightedTitle}</div>
       </div>
       <div class="bookmark-actions">
         <button class="bookmark-action-btn edit-btn" title="${i18n('edit')}">✏️</button>
@@ -315,11 +333,11 @@ function createBookmarkCard(b) {
   } else if (currentView === 'list') {
     cardContent = `
       <input type="checkbox" class="bookmark-checkbox" ${selectedIds.has(b.id) ? 'checked' : ''}>
-      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}" onerror="this.src='icon16.png'">
+      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}">
       <div class="bookmark-content">
-        <div class="bookmark-title" title="${b.title}">${b.title}</div>
+        <div class="bookmark-title" title="${b.title}">${highlightedTitle}</div>
         <div class="bookmark-meta">
-          <span class="bookmark-domain">${getDomain(b.url)}</span>
+          <span class="bookmark-domain">${highlightedDomain}</span>
           <span class="bookmark-time">${activeTime}</span>
         </div>
       </div>
@@ -331,11 +349,11 @@ function createBookmarkCard(b) {
   } else {
     cardContent = `
       <input type="checkbox" class="bookmark-checkbox" ${selectedIds.has(b.id) ? 'checked' : ''}>
-      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}" onerror="this.src='icon16.png'">
+      <img class="bookmark-favicon" src="${b.favicon || 'icon16.png'}">
       <div class="bookmark-content">
-        <div class="bookmark-title" title="${b.title}">${b.title}</div>
+        <div class="bookmark-title" title="${b.title}">${highlightedTitle}</div>
         <div class="bookmark-meta">
-          <span class="bookmark-domain">${getDomain(b.url)}</span>
+          <span class="bookmark-domain">${highlightedDomain}</span>
           <span class="bookmark-time">${activeTime}</span>
         </div>
         ${tagsHtml}
@@ -349,6 +367,12 @@ function createBookmarkCard(b) {
   }
   
   card.innerHTML = cardContent;
+
+  const faviconImg = card.querySelector('.bookmark-favicon');
+  faviconImg.onerror = () => {
+    faviconImg.src = 'icon16.png';
+    faviconImg.onerror = null;
+  };
   
   if (batchMode) {
     card.classList.add('batch-mode');
@@ -406,11 +430,14 @@ function createBookmarkCard(b) {
   return card;
 }
 
-function createGroupElement(groupName, items) {
+function createGroupElement(groupName, items, keyword = '') {
   const group = document.createElement('div');
   group.className = 'group';
   if (pinnedGroups.includes(groupName)) {
     group.classList.add('pinned');
+  }
+  if (collapsedGroups.has(groupName)) {
+    group.classList.add('collapsed');
   }
   group.dataset.group = groupName;
   
@@ -420,6 +447,7 @@ function createGroupElement(groupName, items) {
   group.innerHTML = `
     <div class="group-header">
       <div class="group-title-wrapper">
+        <span class="collapse-icon">▼</span>
         <div class="group-color" style="background: ${color}"></div>
         <span class="group-title">${groupName}</span>
         <span class="group-count">${items.length}</span>
@@ -433,9 +461,22 @@ function createGroupElement(groupName, items) {
     <div class="bookmark-list"></div>
   `;
   
+  const header = group.querySelector('.group-header');
+  header.onclick = (e) => {
+    if (e.target.closest('.group-actions') || e.target.closest('.group-title input')) return;
+    
+    const isCollapsed = group.classList.toggle('collapsed');
+    if (isCollapsed) {
+      collapsedGroups.add(groupName);
+    } else {
+      collapsedGroups.delete(groupName);
+    }
+    saveBookmarks();
+  };
+  
   const list = group.querySelector('.bookmark-list');
   sortBookmarks(items).forEach(b => {
-    list.appendChild(createBookmarkCard(b));
+    list.appendChild(createBookmarkCard(b, keyword));
   });
 
   group.addEventListener('dragover', (e) => {
@@ -1188,6 +1229,7 @@ function setupSearch() {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const keyword = input.value.trim().toLowerCase();
+      selectedSearchResultIndex = -1;
       
       if (!keyword) {
         render();
@@ -1205,6 +1247,29 @@ function setupSearch() {
     }, 150);
   });
   
+  input.addEventListener('keydown', (e) => {
+    if (!input.value.trim()) return;
+    
+    const container = document.getElementById('masonry');
+    const cards = container.querySelectorAll('.bookmark-card');
+    if (cards.length === 0) return;
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedSearchResultIndex = Math.min(selectedSearchResultIndex + 1, cards.length - 1);
+      updateSearchSelection(cards);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedSearchResultIndex = Math.max(selectedSearchResultIndex - 1, 0);
+      updateSearchSelection(cards);
+    } else if (e.key === 'Enter') {
+      if (selectedSearchResultIndex >= 0) {
+        e.preventDefault();
+        cards[selectedSearchResultIndex].click();
+      }
+    }
+  });
+  
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
@@ -1215,6 +1280,7 @@ function setupSearch() {
     if (e.key === 'Escape') {
       if (document.activeElement === input && input.value) {
         input.value = '';
+        selectedSearchResultIndex = -1;
         render();
       } else {
         input.focus();
@@ -1224,6 +1290,17 @@ function setupSearch() {
     if (e.key === '/' && document.activeElement !== input) {
       e.preventDefault();
       input.focus();
+    }
+  });
+}
+
+function updateSearchSelection(cards) {
+  cards.forEach((card, index) => {
+    if (index === selectedSearchResultIndex) {
+      card.classList.add('keyboard-focused');
+      card.scrollIntoView({ block: 'nearest' });
+    } else {
+      card.classList.remove('keyboard-focused');
     }
   });
 }
@@ -1240,8 +1317,8 @@ function renderSearchResults(results, keyword) {
       <div class="search-results-list">
         <div class="empty-state">
           <div class="empty-icon">🔍</div>
-          <div class="empty-title">未找到相关书签</div>
-          <div class="empty-desc">尝试其他关键词</div>
+          <div class="empty-title">${i18n('noMatchingBookmarks')}</div>
+          <div class="empty-desc">${i18n('tryOtherKeywords')}</div>
         </div>
       </div>
     `;
@@ -1252,7 +1329,7 @@ function renderSearchResults(results, keyword) {
   list.className = 'search-results-list';
   
   const group = document.createElement('div');
-  group.className = 'group';
+  group.className = 'group search-results-group';
   group.innerHTML = `
     <div class="group-header">
       <div class="group-title-wrapper">
@@ -1265,7 +1342,7 @@ function renderSearchResults(results, keyword) {
   `;
   
   const bookmarkList = group.querySelector('.bookmark-list');
-  results.forEach(b => bookmarkList.appendChild(createBookmarkCard(b)));
+  results.forEach(b => bookmarkList.appendChild(createBookmarkCard(b, keyword)));
   
   list.appendChild(group);
   container.appendChild(list);
@@ -1312,6 +1389,26 @@ function setupBatchMode() {
     document.getElementById('batchBtn').classList.remove('primary');
     render();
   };
+}
+
+function setupGlobalCollapse() {
+  const expandAllBtn = document.getElementById('expandAllBtn');
+  const collapseAllBtn = document.getElementById('collapseAllBtn');
+  
+  if (expandAllBtn) {
+    expandAllBtn.onclick = () => {
+      collapsedGroups.clear();
+      saveBookmarks(render);
+    };
+  }
+  
+  if (collapseAllBtn) {
+    collapseAllBtn.onclick = () => {
+      const { groups } = groupBookmarks();
+      Object.keys(groups).forEach(name => collapsedGroups.add(name));
+      saveBookmarks(render);
+    };
+  }
 }
 
 function setupModals() {
@@ -1373,6 +1470,7 @@ async function init() {
     setupSort();
     setupBatchMode();
     setupModals();
+    setupGlobalCollapse();
     
     document.body.addEventListener('click', (e) => {
       const input = document.getElementById('searchInput');

@@ -1,41 +1,89 @@
 :root {
-  --primary: #6366f1;
-  --primary-light: #818cf8;
-  --primary-dark: #4f46e5;
-  --primary-glow: rgba(99, 102, 241, 0.15);
-  --accent: #22d3ee;
-  --danger: #f43f5e;
-  --danger-light: #fef2f2;
+  /* 品牌色 - 稍微加深饱和度 */
+  --primary: #4338ca;
+  --primary-light: #6366f1;
+  --primary-dark: #3730a3;
+  --primary-glow: rgba(67, 56, 202, 0.12);
+  
+  /* 辅助色 */
+  --accent: #06b6d4;
+  --danger: #ef4444;
   --success: #10b981;
-  --success-light: #d1fae5;
   --warning: #f59e0b;
   
-  --header-bg: #ffffff;
-  --bg: #f8fafc;
-  --bg-secondary: #f1f5f9;
+  /* 极其关键：背景层级 - 调深底色，拉开与纯白卡片的距离 */
+  --bg: #ebf0f5;              /* 明显的冷灰色背景 */
+  --bg-secondary: #f8fafc;    /* Slate 50: 用于输入框/浅色区域 */
+  --header-bg: rgba(255, 255, 255, 0.9);
   --card-bg: #ffffff;
-  --card-bg-hover: #fafafa;
   
-  --text: #1e293b;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
+  /* 文字 */
+  --text: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
   
+  /* 边框与阴影 - 升级为多层立体投影 */
   --border: #e2e8f0;
   --border-light: #f1f5f9;
   
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.04), 0 4px 6px -4px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
   
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  
-  --transition-fast: 0.15s ease;
-  --transition: 0.2s ease;
-  --transition-slow: 0.3s ease;
+  --radius-lg: 16px;
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 搜索高亮优化 - 使用 Amber 200 配 Amber 800 文字 */
+.search-highlight {
+  background-color: #fef08a;
+  color: #92400e;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.group {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  /* 增加精致的细边框 */
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 
+    0 0 0 1px rgba(15, 23, 42, 0.05),
+    0 10px 15px -3px rgba(15, 23, 42, 0.08);
+  transition: all var(--transition);
+}
+
+.group:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 25px 50px -12px rgba(15, 23, 42, 0.15);
+}
+
+.bookmark-card {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background var(--transition);
+  border: 1px solid transparent;
+}
+
+.bookmark-card:hover {
+  background: var(--bg);
+}
+
+.bookmark-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.bookmark-domain {
+  font-size: 11.5px;
+  color: var(--text-muted);
 }
 
 [data-theme="dark"] {
@@ -66,8 +114,8 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: var(--bg);
+  background-color: var(--bg) !important; /* 强制生效 */
+  font-family: "Inter", -apple-system, sans-serif;
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -75,17 +123,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 顶部导航栏增加更强的模糊感 */
 .header-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
   background: var(--header-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   position: sticky;
   top: 0;
   z-index: 100;
-  border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 .header-left {
@@ -605,6 +656,32 @@ body {
   padding: 10px 14px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  user-select: none;
+}
+
+.group.collapsed {
+  transform: none !important;
+}
+
+.group.collapsed .group-header {
+  border-bottom: none;
+}
+
+.group.collapsed .bookmark-list {
+  display: none;
+}
+
+.collapse-icon {
+  font-size: 10px;
+  transition: transform var(--transition);
+  color: var(--text-muted);
+  margin-right: 4px;
+  display: inline-block;
+}
+
+.group.collapsed .collapse-icon {
+  transform: rotate(-90deg);
 }
 
 .group-title-wrapper {
@@ -711,12 +788,72 @@ body {
 .bookmark-card:hover {
   background: var(--bg-secondary);
   border-color: var(--border-light);
+  transform: translateX(2px);
 }
 
 .bookmark-card.selected {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.search-highlight {
+  background-color: #fef08a;
+  color: #92400e;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.bookmark-card.keyboard-focused {
+  background: var(--bg-secondary);
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+/* Skeleton Loading */
+.skeleton-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  width: 100%;
+}
+
+.skeleton-group {
+  flex: 1;
+  min-width: 280px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: 15px;
+  border: 1px solid var(--border-light);
+}
+
+.skeleton-header {
+  height: 24px;
+  width: 120px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  margin-bottom: 15px;
+  animation: skeleton-pulse 1.5s infinite ease-in-out;
+}
+
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-card {
+  height: 60px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  animation: skeleton-pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes skeleton-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.6; }
 }
 
 .bookmark-card.dragging {

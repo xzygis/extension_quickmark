@@ -89,14 +89,23 @@
   "moveToGroup": {
     "message": "移动到分组"
   },
-  "selectGroup": {
-    "message": "选择分组"
-  },
   "newGroup": {
     "message": "新分组名称"
   },
   "addTags": {
     "message": "添加标签"
+  },
+  "noMatchingBookmarks": {
+    "message": "未找到相关书签"
+  },
+  "tryOtherKeywords": {
+    "message": "尝试其他关键词"
+  },
+  "expandAll": {
+    "message": "全部展开"
+  },
+  "collapseAll": {
+    "message": "全部折叠"
   },
   "saved": {
     "message": "已保存"
