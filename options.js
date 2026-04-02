@@ -94,10 +94,13 @@ function saveSettings(key, value) {
 }
 
 function exportBookmarks() {
-  chrome.storage.local.get({ bookmarks: [], groupOrder: [] }, (data) => {
+  chrome.storage.local.get({ bookmarks: [], groups: [], groupOrder: [], pinnedGroups: [] }, (data) => {
     const exportData = {
+      version: 2,
       bookmarks: data.bookmarks,
+      groups: data.groups || [],
       groupOrder: data.groupOrder,
+      pinnedGroups: data.pinnedGroups || [],
       exportedAt: new Date().toISOString()
     };
     
@@ -127,13 +130,17 @@ function handleImport(e) {
       const parsed = JSON.parse(event.target.result);
       
       let importedBookmarks = [];
+      let importedGroups = [];
       let groupOrder = [];
+      let pinnedGroups = [];
       
       if (Array.isArray(parsed)) {
         importedBookmarks = parsed;
       } else if (parsed.bookmarks && Array.isArray(parsed.bookmarks)) {
         importedBookmarks = parsed.bookmarks;
+        importedGroups = parsed.groups || [];
         groupOrder = parsed.groupOrder || [];
+        pinnedGroups = parsed.pinnedGroups || [];
       } else {
         throw new Error('Invalid format');
       }
@@ -142,16 +149,33 @@ function handleImport(e) {
         throw new Error('No bookmarks found');
       }
       
-      chrome.storage.local.get({ bookmarks: [], groupOrder: [] }, (existing) => {
+      chrome.storage.local.get({ bookmarks: [], groups: [], groupOrder: [], pinnedGroups: [] }, (existing) => {
         const existingUrls = new Set(existing.bookmarks.map(b => b.url));
-        const newBookmarks = importedBookmarks.filter(b => b.url && !existingUrls.has(b.url));
-        const merged = [...existing.bookmarks, ...newBookmarks];
+        const existingGroupIds = new Set((existing.groups || []).map(g => g.id));
         
+        let newBookmarks = importedBookmarks.filter(b => b.url && !existingUrls.has(b.url));
+        
+        const localGroups = [...(existing.groups || [])];
+        
+        if (importedGroups.length > 0) {
+          importedGroups.forEach(g => {
+            if (g.id && !existingGroupIds.has(g.id)) {
+              localGroups.push(g);
+            }
+          });
+        }
+        
+        newBookmarks = migrateBookmarks(newBookmarks, localGroups);
+        
+        const merged = [...existing.bookmarks, ...newBookmarks];
         const mergedGroupOrder = groupOrder.length > 0 ? groupOrder : existing.groupOrder;
+        const mergedPinnedGroups = pinnedGroups.length > 0 ? pinnedGroups : (existing.pinnedGroups || []);
         
         chrome.storage.local.set({ 
           bookmarks: merged,
-          groupOrder: mergedGroupOrder
+          groups: localGroups,
+          groupOrder: mergedGroupOrder,
+          pinnedGroups: mergedPinnedGroups
         }, () => {
           showToast(i18n('importSuccess').replace('{count}', newBookmarks.length), 'success');
         });
@@ -163,6 +187,24 @@ function handleImport(e) {
   };
   reader.readAsText(file);
   e.target.value = '';
+}
+
+function generateGroupId() {
+  return 'grp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+}
+
+function migrateBookmarks(bookmarkList, groupList) {
+  return bookmarkList.map(b => {
+    if (b.groupId) return b;
+    const groupName = b.group || '';
+    if (!groupName) return b;
+    let group = groupList.find(g => g.name === groupName);
+    if (!group) {
+      group = { id: generateGroupId(), name: groupName, updatedAt: Date.now() };
+      groupList.push(group);
+    }
+    return { ...b, groupId: group.id };
+  });
 }
 
 async function clearAllData() {
@@ -179,7 +221,9 @@ async function clearAllData() {
       
       chrome.storage.local.remove([
         'bookmarks',
+        'groups',
         'groupOrder',
+        'pinnedGroups',
         'deletedUrls',
         'viewMode',
         'sortMode',

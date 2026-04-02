@@ -20,13 +20,88 @@ function isEdgeBrowser() {
   return navigator.userAgent.includes('Edg/');
 }
 
+function generateGroupId() {
+  return 'grp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+}
+
+async function migrateToGroupIds() {
+  const data = await chrome.storage.local.get(['bookmarks', 'groups', 'groupOrder', 'pinnedGroups', 'collapsedGroups', 'dataMigrationVersion']);
+  
+  if (data.dataMigrationVersion >= 2) return;
+  
+  const bookmarks = data.bookmarks || [];
+  const groups = data.groups || [];
+  const groupOrder = data.groupOrder || [];
+  const pinnedGroups = data.pinnedGroups || [];
+  const collapsedGroups = data.collapsedGroups || [];
+  
+  const needsMigration = bookmarks.some(b => !b.groupId && b.group);
+  const orderNeedsMigration = groupOrder.length > 0 && groupOrder.some(g => !g.startsWith('grp_'));
+  
+  if (!needsMigration && !orderNeedsMigration) {
+    await chrome.storage.local.set({ dataMigrationVersion: 2 });
+    return;
+  }
+  
+  const groupNameToId = new Map();
+  groups.forEach(g => {
+    if (g.name && g.id) groupNameToId.set(g.name, g.id);
+  });
+  
+  const updatedGroups = [...groups];
+  
+  bookmarks.forEach(b => {
+    if (b.groupId) return;
+    const groupName = b.group || '';
+    if (!groupName) return;
+    
+    let gId = groupNameToId.get(groupName);
+    if (!gId) {
+      gId = generateGroupId();
+      groupNameToId.set(groupName, gId);
+      updatedGroups.push({ id: gId, name: groupName, updatedAt: Date.now() });
+    }
+    b.groupId = gId;
+  });
+  
+  const updatedGroupOrder = groupOrder.map(name => {
+    if (name.startsWith('grp_')) return name;
+    return groupNameToId.get(name) || name;
+  });
+  
+  const updatedPinnedGroups = pinnedGroups.map(name => {
+    if (name.startsWith('grp_')) return name;
+    return groupNameToId.get(name) || name;
+  });
+  
+  const updatedCollapsedGroups = collapsedGroups.map(name => {
+    if (name.startsWith('grp_')) return name;
+    return groupNameToId.get(name) || name;
+  });
+  
+  await chrome.storage.local.set({
+    bookmarks,
+    groups: updatedGroups,
+    groupOrder: updatedGroupOrder,
+    pinnedGroups: updatedPinnedGroups,
+    collapsedGroups: updatedCollapsedGroups,
+    dataMigrationVersion: 2
+  });
+  
+  console.log('[Migration] Migrated to group IDs:', {
+    groupsCreated: updatedGroups.length - groups.length,
+    bookmarksMigrated: bookmarks.filter(b => b.groupId).length
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get({ bookmarks: [] }, () => {});
+  migrateToGroupIds();
   setupSyncAlarm();
   initAllTabsBadge();
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  migrateToGroupIds();
   setupSyncAlarm();
   initAllTabsBadge();
 });
@@ -399,7 +474,7 @@ async function ensureUserDocument() {
   }
 }
 
-async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}, pinnedGroups = []) {
+async function syncBookmarksToCloud(bookmarks, groups = [], groupOrder = [], deletedUrls = {}, pinnedGroups = []) {
   if (!currentUser) {
     throw new Error('Not authenticated');
   }
@@ -415,10 +490,22 @@ async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}
         title: { stringValue: b.title || '' },
         favicon: { stringValue: b.favicon || '' },
         group: { stringValue: b.group || '' },
+        groupId: { stringValue: b.groupId || '' },
         tags: { arrayValue: { values: (b.tags || []).map(t => ({ stringValue: t })) } },
         createdAt: { integerValue: String(b.createdAt || Date.now()) },
         clickCount: { integerValue: String(b.clickCount || 0) },
-        lastActiveAt: { integerValue: String(b.lastActiveAt || 0) }
+        lastActiveAt: { integerValue: String(b.lastActiveAt || 0) },
+        updatedAt: { integerValue: String(b.updatedAt || 0) }
+      }
+    }
+  }));
+  
+  const groupsData = groups.map(g => ({
+    mapValue: {
+      fields: {
+        id: { stringValue: g.id },
+        name: { stringValue: g.name || '' },
+        updatedAt: { integerValue: String(g.updatedAt || 0) }
       }
     }
   }));
@@ -441,6 +528,7 @@ async function syncBookmarksToCloud(bookmarks, groupOrder = [], deletedUrls = {}
     body: JSON.stringify({
       fields: {
         bookmarks: { arrayValue: { values: bookmarksData } },
+        groups: { arrayValue: { values: groupsData } },
         groupOrder: { arrayValue: { values: groupOrder.map(g => ({ stringValue: g })) } },
         pinnedGroups: { arrayValue: { values: (pinnedGroups || []).map(g => ({ stringValue: g })) } },
         deletedUrls: { arrayValue: { values: deletedUrlsData } },
@@ -586,7 +674,7 @@ async function fetchBookmarksFromCloud() {
   });
   
   if (response.status === 404) {
-    return { bookmarks: [], groupOrder: [], pinnedGroups: [] };
+    return { bookmarks: [], groups: [], groupOrder: [], pinnedGroups: [] };
   }
   
   if (!response.ok) {
@@ -597,7 +685,7 @@ async function fetchBookmarksFromCloud() {
   const data = await response.json();
   
   if (!data.fields) {
-    return { bookmarks: [], groupOrder: [], pinnedGroups: [], deletedUrls: {} };
+    return { bookmarks: [], groups: [], groupOrder: [], pinnedGroups: [], deletedUrls: {} };
   }
   
   const bookmarks = (data.fields.bookmarks?.arrayValue?.values || []).map(item => {
@@ -608,15 +696,26 @@ async function fetchBookmarksFromCloud() {
       title: fields.title?.stringValue || '',
       favicon: fields.favicon?.stringValue || '',
       group: fields.group?.stringValue || '',
+      groupId: fields.groupId?.stringValue || '',
       tags: (fields.tags?.arrayValue?.values || []).map(t => t.stringValue),
       createdAt: parseInt(fields.createdAt?.integerValue || '0'),
       clickCount: parseInt(fields.clickCount?.integerValue || '0'),
-      lastActiveAt: parseInt(fields.lastActiveAt?.integerValue || '0')
+      lastActiveAt: parseInt(fields.lastActiveAt?.integerValue || '0'),
+      updatedAt: parseInt(fields.updatedAt?.integerValue || '0')
     };
   });
   
   const groupOrder = (data.fields.groupOrder?.arrayValue?.values || []).map(g => g.stringValue);
   const pinnedGroups = (data.fields.pinnedGroups?.arrayValue?.values || []).map(g => g.stringValue);
+  
+  const groups = (data.fields.groups?.arrayValue?.values || []).map(item => {
+    const fields = item.mapValue.fields;
+    return {
+      id: fields.id?.stringValue || '',
+      name: fields.name?.stringValue || '',
+      updatedAt: parseInt(fields.updatedAt?.integerValue || '0')
+    };
+  });
   
   const deletedUrls = {};
   (data.fields.deletedUrls?.arrayValue?.values || []).forEach(item => {
@@ -628,7 +727,7 @@ async function fetchBookmarksFromCloud() {
     }
   });
   
-  return { bookmarks, groupOrder, pinnedGroups, deletedUrls };
+  return { bookmarks, groups, groupOrder, pinnedGroups, deletedUrls };
 }
 
 async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, cloudDeletedUrls) {
@@ -637,6 +736,11 @@ async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, 
   
   Object.entries(localDeletedUrls).forEach(([url, localTime]) => {
     const cloudTime = cloudDeletedUrls[url] || 0;
+    mergedDeletedUrls[url] = Math.max(localTime, cloudTime);
+  });
+  
+  Object.entries(cloudDeletedUrls).forEach(([url, cloudTime]) => {
+    const localTime = localDeletedUrls[url] || 0;
     mergedDeletedUrls[url] = Math.max(localTime, cloudTime);
   });
   
@@ -660,12 +764,10 @@ async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, 
     if (!existing) {
       merged.set(b.url, b);
     } else {
-      const localTime = b.createdAt || 0;
-      const cloudTime = existing.createdAt || 0;
-      const localClick = b.lastActiveAt || 0;
-      const cloudClick = existing.lastActiveAt || 0;
+      const localUpdated = b.updatedAt || b.lastActiveAt || b.createdAt || 0;
+      const cloudUpdated = existing.updatedAt || existing.lastActiveAt || existing.createdAt || 0;
       
-      if (localClick > cloudClick || (localClick === cloudClick && localTime > cloudTime)) {
+      if (localUpdated >= cloudUpdated) {
         merged.set(b.url, {
           ...existing,
           ...b,
@@ -693,6 +795,30 @@ async function mergeBookmarks(localBookmarks, cloudBookmarks, localDeletedUrls, 
     bookmarks: Array.from(merged.values()),
     deletedUrls: cleanedDeletedUrls
   };
+}
+
+function mergeGroups(localGroups, cloudGroups) {
+  const merged = new Map();
+  
+  cloudGroups.forEach(g => {
+    if (g.id) merged.set(g.id, g);
+  });
+  
+  localGroups.forEach(g => {
+    if (!g.id) return;
+    const existing = merged.get(g.id);
+    if (!existing) {
+      merged.set(g.id, g);
+    } else {
+      const localTime = g.updatedAt || 0;
+      const cloudTime = existing.updatedAt || 0;
+      if (localTime >= cloudTime) {
+        merged.set(g.id, g);
+      }
+    }
+  });
+  
+  return Array.from(merged.values());
 }
 
 async function getDeviceId() {
@@ -731,8 +857,9 @@ async function performSync() {
     }
   }
   
-  const localData = await chrome.storage.local.get(['bookmarks', 'groupOrder', 'pinnedGroups', 'deletedUrls']);
+  const localData = await chrome.storage.local.get(['bookmarks', 'groups', 'groupOrder', 'pinnedGroups', 'deletedUrls']);
   const localBookmarks = localData.bookmarks || [];
+  const localGroups = localData.groups || [];
   const localGroupOrder = localData.groupOrder || [];
   const localPinnedGroups = localData.pinnedGroups || [];
   const localDeletedUrls = localData.deletedUrls || {};
@@ -748,17 +875,48 @@ async function performSync() {
     cloudData.deletedUrls || {}
   );
   
-  const mergedGroupOrder = localGroupOrder.length > 0 ? localGroupOrder : cloudData.groupOrder;
-  const mergedPinnedGroups = localPinnedGroups.length > 0 ? localPinnedGroups : (cloudData.pinnedGroups || []);
+  const mergedGroups = mergeGroups(localGroups, cloudData.groups || []);
+  
+  const actualGroupIds = new Set(mergeResult.bookmarks.map(b => b.groupId).filter(Boolean));
+  
+  const localOrderNewer = localGroupOrder.length > 0;
+  const baseGroupOrder = localOrderNewer ? localGroupOrder : cloudData.groupOrder;
+  const otherGroupOrder = localOrderNewer ? cloudData.groupOrder : localGroupOrder;
+  
+  const mergedGroupOrder = [...baseGroupOrder];
+  otherGroupOrder.forEach(g => {
+    if (!mergedGroupOrder.includes(g)) {
+      mergedGroupOrder.push(g);
+    }
+  });
+  
+  const cleanedGroupOrder = mergedGroupOrder.filter(g => actualGroupIds.has(g));
+  actualGroupIds.forEach(g => {
+    if (g && !cleanedGroupOrder.includes(g)) {
+      cleanedGroupOrder.push(g);
+    }
+  });
+  
+  const basePinnedGroups = localOrderNewer ? localPinnedGroups : (cloudData.pinnedGroups || []);
+  const otherPinnedGroups = localOrderNewer ? (cloudData.pinnedGroups || []) : localPinnedGroups;
+  
+  const mergedPinnedGroups = [...basePinnedGroups];
+  otherPinnedGroups.forEach(g => {
+    if (!mergedPinnedGroups.includes(g)) {
+      mergedPinnedGroups.push(g);
+    }
+  });
+  const cleanedPinnedGroups = mergedPinnedGroups.filter(g => actualGroupIds.has(g));
   
   await chrome.storage.local.set({
     bookmarks: mergeResult.bookmarks,
-    groupOrder: mergedGroupOrder,
-    pinnedGroups: mergedPinnedGroups,
+    groups: mergedGroups,
+    groupOrder: cleanedGroupOrder,
+    pinnedGroups: cleanedPinnedGroups,
     deletedUrls: mergeResult.deletedUrls
   });
   
-  await syncBookmarksToCloud(mergeResult.bookmarks, mergedGroupOrder, mergeResult.deletedUrls, mergedPinnedGroups);
+  await syncBookmarksToCloud(mergeResult.bookmarks, mergedGroups, cleanedGroupOrder, mergeResult.deletedUrls, cleanedPinnedGroups);
   
   return {
     localCount: localBookmarks.length,

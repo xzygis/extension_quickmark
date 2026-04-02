@@ -1,5 +1,6 @@
 const GROUP_COLORS = ['#4f8cff', '#52c41a', '#faad14', '#ff4d4f', '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16'];
 let bookmarks = [];
+let groups = [];
 let selectedIds = new Set();
 let currentView = 'card';
 let currentSort = 'recent';
@@ -72,6 +73,32 @@ function getGroupColor(groupName) {
   return GROUP_COLORS[Math.abs(hash) % GROUP_COLORS.length];
 }
 
+function generateGroupId() {
+  return 'grp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+}
+
+function getGroupById(groupId) {
+  return groups.find(g => g.id === groupId);
+}
+
+function getGroupName(groupId) {
+  const group = getGroupById(groupId);
+  return group ? group.name : groupId;
+}
+
+function findGroupByName(name) {
+  return groups.find(g => g.name === name);
+}
+
+function ensureGroup(name) {
+  let group = findGroupByName(name);
+  if (!group) {
+    group = { id: generateGroupId(), name, updatedAt: Date.now() };
+    groups.push(group);
+  }
+  return group;
+}
+
 function formatTime(timestamp) {
   if (!timestamp) return '';
   const now = Date.now();
@@ -134,6 +161,7 @@ function showTip(msg, type = 'success') {
 function saveBookmarks(callback) {
   chrome.storage.local.set({ 
     bookmarks, 
+    groups,
     groupOrder, 
     pinnedGroups,
     collapsedGroups: Array.from(collapsedGroups)
@@ -161,8 +189,9 @@ function batchDeleteWithRecord(ids, urls, callback) {
 }
 
 function loadBookmarks(callback) {
-  chrome.storage.local.get({ bookmarks: [], groupOrder: [], pinnedGroups: [], collapsedGroups: [], viewMode: 'card', sortMode: 'recent', lang: 'auto', theme: 'light' }, (data) => {
+  chrome.storage.local.get({ bookmarks: [], groups: [], groupOrder: [], pinnedGroups: [], collapsedGroups: [], viewMode: 'card', sortMode: 'recent', lang: 'auto', theme: 'light' }, (data) => {
     bookmarks = data.bookmarks;
+    groups = data.groups || [];
     groupOrder = data.groupOrder || [];
     pinnedGroups = data.pinnedGroups || [];
     collapsedGroups = new Set(data.collapsedGroups || []);
@@ -170,6 +199,19 @@ function loadBookmarks(callback) {
     currentSort = data.sortMode || 'recent';
     currentLang = data.lang || 'auto';
     applyTheme(data.theme || 'light');
+    
+    let needsSave = false;
+    bookmarks.forEach(b => {
+      if (!b.groupId && b.group) {
+        const g = ensureGroup(b.group);
+        b.groupId = g.id;
+        needsSave = true;
+      }
+    });
+    if (needsSave) {
+      chrome.storage.local.set({ bookmarks, groups });
+    }
+    
     if (callback) callback();
   });
 }
@@ -213,33 +255,33 @@ function filterByTag(items) {
 }
 
 function groupBookmarks() {
-  const groups = {};
+  const groupMap = {};
+  const ungroupedId = '__ungrouped__';
+  
   filterByTag(bookmarks).forEach(b => {
-    const g = b.group || i18n('ungrouped');
-    if (!groups[g]) groups[g] = [];
-    groups[g].push(b);
+    const gId = b.groupId || ungroupedId;
+    if (!groupMap[gId]) groupMap[gId] = [];
+    groupMap[gId].push(b);
   });
   
-  Object.keys(groups).forEach(g => {
-    groups[g] = [...groups[g]].sort((a, b) => getLastActiveTime(b) - getLastActiveTime(a));
+  Object.keys(groupMap).forEach(gId => {
+    groupMap[gId] = [...groupMap[gId]].sort((a, b) => getLastActiveTime(b) - getLastActiveTime(a));
   });
   
   const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
   
-  const groupsWithScore = Object.keys(groups).map(name => {
-    const items = groups[name];
+  const groupsWithScore = Object.keys(groupMap).map(gId => {
+    const items = groupMap[gId];
+    const name = gId === ungroupedId ? i18n('ungrouped') : getGroupName(gId);
     const size = items.length;
     const recentCount = items.filter(b => getLastActiveTime(b) > sevenDaysAgo).length;
     const totalClicks = items.reduce((sum, b) => sum + (b.clickCount || 0), 0);
-    const isPinned = pinnedGroups.includes(name);
-    
-    // Balanced score calculation: size + recent activity weight + historical popularity
+    const isPinned = pinnedGroups.includes(gId);
     const score = size + (recentCount * 2) + (totalClicks * 0.1);
     
-    return { name, items, size, score, isPinned };
+    return { groupId: gId, name, items, size, score, isPinned };
   });
 
-  // Sort by pinned status first, then by score
   groupsWithScore.sort((a, b) => {
     if (a.isPinned !== b.isPinned) {
       return a.isPinned ? -1 : 1;
@@ -247,15 +289,15 @@ function groupBookmarks() {
     return b.score - a.score;
   });
 
-  const orderedGroups = groupsWithScore.map(g => g.name);
+  const orderedGroups = groupsWithScore.map(g => g.groupId);
   
-  return { groups, orderedGroups, groupsWithScore };
+  return { groupMap, orderedGroups, groupsWithScore };
 }
 
-function togglePinGroup(groupName) {
-  const idx = pinnedGroups.indexOf(groupName);
+function togglePinGroup(groupId) {
+  const idx = pinnedGroups.indexOf(groupId);
   if (idx === -1) {
-    pinnedGroups.push(groupName);
+    pinnedGroups.push(groupId);
   } else {
     pinnedGroups.splice(idx, 1);
   }
@@ -422,7 +464,7 @@ function createBookmarkCard(b, keyword = '') {
   
   card.ondragstart = (e) => {
     card.classList.add('dragging');
-    e.dataTransfer.setData('text/plain', JSON.stringify({ id: b.id, fromGroup: b.group }));
+    e.dataTransfer.setData('text/plain', JSON.stringify({ id: b.id, fromGroupId: b.groupId }));
   };
   
   card.ondragend = () => card.classList.remove('dragging');
@@ -430,19 +472,20 @@ function createBookmarkCard(b, keyword = '') {
   return card;
 }
 
-function createGroupElement(groupName, items, keyword = '') {
+function createGroupElement(groupId, groupName, items, keyword = '') {
   const group = document.createElement('div');
   group.className = 'group';
-  if (pinnedGroups.includes(groupName)) {
+  if (pinnedGroups.includes(groupId)) {
     group.classList.add('pinned');
   }
-  if (collapsedGroups.has(groupName)) {
+  if (collapsedGroups.has(groupId)) {
     group.classList.add('collapsed');
   }
+  group.dataset.groupId = groupId;
   group.dataset.group = groupName;
   
   const color = getGroupColor(groupName);
-  const isPinned = pinnedGroups.includes(groupName);
+  const isPinned = pinnedGroups.includes(groupId);
   
   group.innerHTML = `
     <div class="group-header">
@@ -467,9 +510,9 @@ function createGroupElement(groupName, items, keyword = '') {
     
     const isCollapsed = group.classList.toggle('collapsed');
     if (isCollapsed) {
-      collapsedGroups.add(groupName);
+      collapsedGroups.add(groupId);
     } else {
-      collapsedGroups.delete(groupName);
+      collapsedGroups.delete(groupId);
     }
     saveBookmarks();
   };
@@ -501,11 +544,13 @@ function createGroupElement(groupName, items, keyword = '') {
     group.classList.remove('drag-over');
     try {
       const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-      if (data.id && data.fromGroup !== groupName) {
+      if (data.id && data.fromGroupId !== groupId) {
         const bookmark = bookmarks.find(b => b.id === data.id);
         if (bookmark) {
+          bookmark.groupId = groupId;
           bookmark.group = groupName;
           bookmark.lastActiveAt = Date.now();
+          bookmark.updatedAt = Date.now();
           saveBookmarks(() => {
             showTip(i18n('moved'));
             render();
@@ -519,7 +564,7 @@ function createGroupElement(groupName, items, keyword = '') {
 
   group.querySelector('.pin-btn').onclick = (e) => {
     e.stopPropagation();
-    togglePinGroup(groupName);
+    togglePinGroup(groupId);
   };
 
   group.querySelector('.rename-btn').onclick = () => {
@@ -532,11 +577,18 @@ function createGroupElement(groupName, items, keyword = '') {
     const finishEdit = () => {
       const newName = input.value.trim();
       if (newName && newName !== groupName) {
+        const now = Date.now();
+        const groupObj = getGroupById(groupId);
+        if (groupObj) {
+          groupObj.name = newName;
+          groupObj.updatedAt = now;
+        }
         bookmarks.forEach(b => {
-          if (b.group === groupName) b.group = newName;
+          if (b.groupId === groupId) {
+            b.group = newName;
+            b.updatedAt = now;
+          }
         });
-        const idx = groupOrder.indexOf(groupName);
-        if (idx !== -1) groupOrder[idx] = newName;
         saveBookmarks(render);
       } else {
         titleEl.textContent = groupName;
@@ -583,9 +635,9 @@ function render() {
   const cols = Array.from({ length: colCount }, () => []);
   const colHeights = Array(colCount).fill(0);
   
-  groupsWithScore.forEach(({ name, items, size }) => {
+  groupsWithScore.forEach(({ groupId, name, items, size }) => {
     const minIdx = colHeights.indexOf(Math.min(...colHeights));
-    cols[minIdx].push({ groupName: name, items });
+    cols[minIdx].push({ groupId, groupName: name, items });
     colHeights[minIdx] += size + 2;
   });
   
@@ -593,8 +645,8 @@ function render() {
   cols.forEach(colGroups => {
     const colDiv = document.createElement('div');
     colDiv.className = 'masonry-col';
-    colGroups.forEach(({ groupName, items }) => {
-      colDiv.appendChild(createGroupElement(groupName, items));
+    colGroups.forEach(({ groupId, groupName, items }) => {
+      colDiv.appendChild(createGroupElement(groupId, groupName, items));
     });
     container.appendChild(colDiv);
   });
@@ -617,10 +669,12 @@ function updateBatchToolbar() {
 function getAllGroups() {
   const groupCount = {};
   bookmarks.forEach(b => {
-    const g = b.group || i18n('ungrouped');
-    groupCount[g] = (groupCount[g] || 0) + 1;
+    const gId = b.groupId || '';
+    const gName = b.groupId ? getGroupName(b.groupId) : (b.group || i18n('ungrouped'));
+    if (!groupCount[gId]) groupCount[gId] = { name: gName, count: 0 };
+    groupCount[gId].count++;
   });
-  return Object.entries(groupCount).sort((a, b) => b[1] - a[1]);
+  return Object.entries(groupCount).sort((a, b) => b[1].count - a[1].count);
 }
 
 function getAllTagsWithCount() {
@@ -642,16 +696,17 @@ function setupGroupDropdown() {
   
   function getSelectedGroup() {
     const chip = wrapper.querySelector('.group-chip');
-    return chip ? chip.dataset.value : null;
+    return chip ? { groupId: chip.dataset.groupId || '', groupName: chip.dataset.value } : null;
   }
   
-  function setGroupChip(groupName) {
+  function setGroupChip(groupName, groupId = '') {
     wrapper.querySelectorAll('.group-chip').forEach(el => el.remove());
     
     if (groupName) {
       const chip = document.createElement('span');
       chip.className = 'group-chip';
       chip.dataset.value = groupName;
+      chip.dataset.groupId = groupId;
       chip.innerHTML = `<span class="group-chip-color" style="background: ${getGroupColor(groupName)}"></span>${groupName} <span class="tag-remove">×</span>`;
       chip.querySelector('.tag-remove').onclick = (e) => {
         e.stopPropagation();
@@ -674,7 +729,7 @@ function setupGroupDropdown() {
     
     if (filterByInput && input.value.trim()) {
       const currentValue = input.value.toLowerCase();
-      filtered = groups.filter(([name]) => 
+      filtered = groups.filter(([gId, { name }]) => 
         name.toLowerCase().includes(currentValue)
       );
     }
@@ -688,8 +743,8 @@ function setupGroupDropdown() {
         dropdown.classList.remove('show');
       }
     } else {
-      dropdown.innerHTML = filtered.map(([name, count]) => `
-        <div class="combo-dropdown-item" data-value="${name}">
+      dropdown.innerHTML = filtered.map(([gId, { name, count }]) => `
+        <div class="combo-dropdown-item" data-value="${name}" data-group-id="${gId}">
           <span class="item-icon" style="background: ${getGroupColor(name)}"></span>
           <span>${name}</span>
           <span class="item-count">${count}</span>
@@ -699,7 +754,7 @@ function setupGroupDropdown() {
       
       dropdown.querySelectorAll('.combo-dropdown-item').forEach(item => {
         item.onclick = () => {
-          setGroupChip(item.dataset.value);
+          setGroupChip(item.dataset.value, item.dataset.groupId);
           dropdown.classList.remove('show');
         };
       });
@@ -824,7 +879,7 @@ function openEditModal(bookmark) {
   groupInput.style.display = '';
   document.getElementById('editGroupWrapper').querySelectorAll('.group-chip').forEach(el => el.remove());
   if (bookmark.group) {
-    window.setGroupChip(bookmark.group);
+    window.setGroupChip(bookmark.group, bookmark.groupId || '');
   }
   
   const wrapper = document.getElementById('editTagsWrapper');
@@ -857,10 +912,21 @@ function saveEditModal() {
   
   const selectedGroup = window.getSelectedGroup();
   const groupInputValue = document.getElementById('editGroupInput').value.trim();
-  bookmark.group = selectedGroup || groupInputValue || i18n('ungrouped');
+  if (selectedGroup) {
+    bookmark.groupId = selectedGroup.groupId;
+    bookmark.group = selectedGroup.groupName;
+  } else if (groupInputValue) {
+    const g = ensureGroup(groupInputValue);
+    bookmark.groupId = g.id;
+    bookmark.group = g.name;
+  } else {
+    bookmark.groupId = '';
+    bookmark.group = i18n('ungrouped');
+  }
   
   bookmark.note = document.getElementById('editNote').value.trim();
   bookmark.lastActiveAt = Date.now();
+  bookmark.updatedAt = Date.now();
   
   const tags = [];
   document.getElementById('editTagsWrapper').querySelectorAll('.tag-chip').forEach(chip => {
@@ -927,16 +993,24 @@ function confirmMove() {
   const wrapper = document.getElementById('moveGroupWrapper');
   const chip = wrapper.querySelector('.group-chip');
   const inputValue = document.getElementById('moveGroupInput').value.trim();
-  const newGroup = chip ? chip.dataset.value : inputValue;
+  let newGroupId = chip ? chip.dataset.groupId : '';
+  const newGroupName = chip ? chip.dataset.value : inputValue;
   
-  if (!newGroup) {
+  if (!newGroupName) {
     showTip(i18n('pleaseSelectGroup'), 'error');
     return;
   }
   
+  if (!newGroupId) {
+    const g = ensureGroup(newGroupName);
+    newGroupId = g.id;
+  }
+  const now = Date.now();
   bookmarks.forEach(b => {
     if (selectedIds.has(b.id)) {
-      b.group = newGroup;
+      b.groupId = newGroupId;
+      b.group = newGroupName;
+      b.updatedAt = now;
     }
   });
   
@@ -953,13 +1027,14 @@ function setupMoveGroupDropdown() {
   const input = document.getElementById('moveGroupInput');
   const dropdown = document.getElementById('moveGroupDropdown');
   
-  function setMoveGroupChip(groupName) {
+  function setMoveGroupChip(groupName, groupId = '') {
     wrapper.querySelectorAll('.group-chip').forEach(el => el.remove());
     
     if (groupName) {
       const chip = document.createElement('span');
       chip.className = 'group-chip';
       chip.dataset.value = groupName;
+      chip.dataset.groupId = groupId;
       chip.innerHTML = `<span class="group-chip-color" style="background: ${getGroupColor(groupName)}"></span>${groupName} <span class="tag-remove">×</span>`;
       chip.querySelector('.tag-remove').onclick = () => {
         chip.remove();
@@ -980,7 +1055,7 @@ function setupMoveGroupDropdown() {
     
     if (filterByInput && input.value.trim()) {
       const currentValue = input.value.toLowerCase();
-      filtered = groups.filter(([name]) => 
+      filtered = groups.filter(([gId, { name }]) => 
         name.toLowerCase().includes(currentValue)
       );
     }
@@ -994,8 +1069,8 @@ function setupMoveGroupDropdown() {
         dropdown.classList.remove('show');
       }
     } else {
-      dropdown.innerHTML = filtered.map(([name, count]) => `
-        <div class="combo-dropdown-item" data-value="${name}">
+      dropdown.innerHTML = filtered.map(([gId, { name, count }]) => `
+        <div class="combo-dropdown-item" data-value="${name}" data-group-id="${gId}">
           <span class="item-icon" style="background: ${getGroupColor(name)}"></span>
           <span>${name}</span>
           <span class="item-count">${count}</span>
@@ -1005,7 +1080,7 @@ function setupMoveGroupDropdown() {
       
       dropdown.querySelectorAll('.combo-dropdown-item').forEach(item => {
         item.onclick = () => {
-          setMoveGroupChip(item.dataset.value);
+          setMoveGroupChip(item.dataset.value, item.dataset.groupId);
           dropdown.classList.remove('show');
         };
       });
@@ -1404,8 +1479,8 @@ function setupGlobalCollapse() {
   
   if (collapseAllBtn) {
     collapseAllBtn.onclick = () => {
-      const { groups } = groupBookmarks();
-      Object.keys(groups).forEach(name => collapsedGroups.add(name));
+      const { groupsWithScore } = groupBookmarks();
+      groupsWithScore.forEach(g => collapsedGroups.add(g.groupId));
       saveBookmarks(render);
     };
   }

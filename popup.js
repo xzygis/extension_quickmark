@@ -43,6 +43,10 @@ function showToast(type, msgKey) {
   setTimeout(() => window.close(), 800);
 }
 
+function generateGroupId() {
+  return 'grp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+}
+
 chrome.storage.local.get({ language: 'auto' }, function(settings) {
   userLang = settings.language;
   
@@ -58,28 +62,42 @@ chrome.storage.local.get({ language: 'auto' }, function(settings) {
     return;
   }
 
-  chrome.storage.local.get({ bookmarks: [] }, function(data) {
+  chrome.storage.local.get({ bookmarks: [], groups: [], deletedUrls: {} }, function(data) {
     const bookmarks = data.bookmarks;
+    const groups = data.groups || [];
+    const deletedUrls = data.deletedUrls || {};
     const idx = bookmarks.findIndex(b => b.url === tab.url);
     
     if (idx !== -1) {
-      bookmarks.splice(idx, 1);
-      chrome.storage.local.set({ bookmarks }, function() {
+      const removed = bookmarks.splice(idx, 1)[0];
+      deletedUrls[removed.url] = Date.now();
+      chrome.storage.local.set({ bookmarks, deletedUrls }, function() {
         showToast('remove', 'unbookmarked');
       });
     } else {
       const favicon = tab.favIconUrl || '';
       const newUrlHostname = (new URL(tab.url)).hostname;
-      let targetGroup = newUrlHostname;
+      let targetGroupId = '';
+      let targetGroupName = newUrlHostname;
 
       for (const existingB of bookmarks) {
         try {
           const existingHostname = (new URL(existingB.url)).hostname;
           if (existingHostname === newUrlHostname) {
-            targetGroup = existingB.group;
+            targetGroupId = existingB.groupId || '';
+            targetGroupName = existingB.group || newUrlHostname;
             break;
           }
         } catch (e) {}
+      }
+
+      if (!targetGroupId) {
+        let existingGroup = groups.find(g => g.name === targetGroupName);
+        if (!existingGroup) {
+          existingGroup = { id: generateGroupId(), name: targetGroupName, updatedAt: Date.now() };
+          groups.push(existingGroup);
+        }
+        targetGroupId = existingGroup.id;
       }
 
       bookmarks.push({
@@ -87,14 +105,16 @@ chrome.storage.local.get({ language: 'auto' }, function(settings) {
         url: tab.url,
         title: tab.title,
         favicon,
-        group: targetGroup,
+        groupId: targetGroupId,
+        group: targetGroupName,
         tags: [],
         clickCount: 1,
         lastActiveAt: Date.now(),
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       });
       
-      chrome.storage.local.set({ bookmarks }, function() {
+      chrome.storage.local.set({ bookmarks, groups }, function() {
         showToast('success', 'bookmarked');
       });
     }
