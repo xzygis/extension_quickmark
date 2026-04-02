@@ -638,7 +638,8 @@ function render() {
   groupsWithScore.forEach(({ groupId, name, items, size }) => {
     const minIdx = colHeights.indexOf(Math.min(...colHeights));
     cols[minIdx].push({ groupId, groupName: name, items });
-    colHeights[minIdx] += size + 2;
+    const isCollapsed = collapsedGroups.has(groupId);
+    colHeights[minIdx] += isCollapsed ? 2 : size + 2;
   });
   
   container.innerHTML = '';
