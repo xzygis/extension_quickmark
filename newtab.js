@@ -1424,6 +1424,39 @@ function renderSearchResults(results, keyword) {
   container.appendChild(list);
 }
 
+function goHome() {
+  const input = document.getElementById('searchInput');
+  if (input) {
+    input.value = '';
+    input.blur();
+  }
+
+  activeTagFilter = null;
+  selectedSearchResultIndex = -1;
+  selectedIds.clear();
+  batchMode = false;
+  document.getElementById('batchBtn')?.classList.remove('primary');
+  document.querySelectorAll('.modal-overlay.show').forEach(overlay => {
+    overlay.classList.remove('show');
+  });
+
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setupHomeNavigation() {
+  const logo = document.getElementById('homeLogo');
+  if (!logo) return;
+
+  logo.onclick = goHome;
+  logo.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      goHome();
+    }
+  };
+}
+
 function setupViewToggle() {
   document.querySelectorAll('.view-btn').forEach(btn => {
     if (btn.dataset.view === currentView) {
@@ -1547,6 +1580,7 @@ async function init() {
     setupBatchMode();
     setupModals();
     setupGlobalCollapse();
+    setupHomeNavigation();
     
     document.body.addEventListener('click', (e) => {
       const input = document.getElementById('searchInput');

@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Rakkas';
+  src: url('./fonts/Rakkas.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* 品牌色 - 稍微加深饱和度 */
   --primary: #4338ca;
@@ -146,13 +154,35 @@ body {
 }
 
 .logo {
-  font-size: 1.2em;
-  font-weight: 700;
-  color: var(--primary);
+  font-size: 1.6em;
+  font-weight: 800;
   display: flex;
   align-items: center;
   gap: 10px;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 4px 6px;
+  transition: background var(--transition), transform var(--transition);
+}
+
+.logo span {
+  font-family: 'Rakkas', Georgia, serif;
+  font-style: normal;
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo:hover {
+  background: var(--bg-secondary);
+  transform: translateY(-1px);
+}
+
+.logo:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
 .logo-icon {
@@ -1535,5 +1565,4 @@ body {
     flex-wrap: wrap;
   }
 }
-
 

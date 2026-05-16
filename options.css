@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Rakkas';
+  src: url('./fonts/Rakkas.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --primary: #6366f1;
   --primary-light: #818cf8;
@@ -61,13 +69,22 @@ body {
 }
 
 .logo {
-  font-size: 1.4em;
-  font-weight: 700;
-  color: var(--primary);
+  font-size: 1.3em;
+  font-weight: 800;
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
+  letter-spacing: -0.03em;
+}
+
+.logo span {
+  font-family: 'Rakkas', Georgia, serif;
+  font-style: normal;
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .logo-icon {
