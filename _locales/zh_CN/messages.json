@@ -1,9 +1,9 @@
 {
   "extName": {
-    "message": "QuickMark - Bookmark Manager"
+    "message": "QuickMark - 新标签页智能书签管理器与收藏夹"
   },
   "extDescription": {
-    "message": "新标签页智能书签管理器"
+    "message": "最好用的新标签页书签管理器！支持一键收藏网页、云端跨设备同步、智能标签分类、自定义分组，让你的浏览器收藏夹焕然一新。"
   },
   "emptyTitle": {
     "message": "还没有收藏"
